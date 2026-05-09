@@ -1,7 +1,9 @@
 FROM python:3.10-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    ANONYMIZED_TELEMETRY=False \
+    POSTHOG_DISABLED=1
 
 WORKDIR /app
 
@@ -25,4 +27,3 @@ COPY . /app
 EXPOSE 8501
 
 CMD ["streamlit", "run", "frontend/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
-

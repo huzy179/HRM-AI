@@ -88,29 +88,34 @@ Tình trạng hiện tại: đa số CV mẫu là scan → cần OCR để Phase
 **File chính:** `backend/services/matcher.py`
 
 ### 3.1. Kết nối embeddings (Ollama)
-- [ ] Tạo `OllamaEmbeddings(model="nomic-embed-text")`
-- [ ] Thêm config model name trong `backend/core/config.py`
-- [ ] Ghi chú rõ: Ollama phải chạy (daemon) trước khi chạy app
+- [x] Tạo `OllamaEmbeddings(model="nomic-embed-text")`
+- [x] Thêm config model/base_url trong `backend/core/config.py` (`OLLAMA_BASE_URL`)
+- [x] Docker compose đảm bảo Ollama service chạy trước app
 
 ### 3.2. Vector store (Chroma)
-- [ ] Khởi tạo Chroma với `persist_directory="data/chroma_db/cv_screening"`
-- [ ] Collection: `cvs`
-- [ ] Function index:
-  - [ ] `index_cv(cv_id, text, metadata)`
-  - [ ] đảm bảo id ổn định (filename)
-- [ ] Function reset/clear (tùy chọn):
-  - [ ] `reset_collection()` (dùng cho test/demo)
+- [x] Khởi tạo Chroma với `persist_directory="data/chroma_db/cv_screening"`
+- [x] Collection: `cvs`
+- [x] Function index:
+  - [x] `index_cv(cv_id, text, metadata)`
+  - [x] đảm bảo id ổn định (filename)
+- [x] Function reset/clear (tùy chọn):
+  - [x] `reset_collection()` (dùng cho test/demo)
 
 ### 3.3. Scoring & ranking (Phase 1)
-- [ ] Quy ước scoring:
-  - [ ] query JD → `similarity_search_with_score(k=N)`
-  - [ ] map `distance -> similarity -> score 0–100`
-  - [ ] Nên log/return `top_hit_distance` để debug
-- [ ] Hàm `rank_cvs(jd_text) -> list[{cv_id, score, ...}]`
+- [x] Quy ước scoring:
+  - [x] query JD → `similarity_search_with_score(k=N)`
+  - [x] map `distance -> similarity -> score 0–100`
+  - [x] return `distance` trong `notes` để debug
+- [x] Hàm `rank(jd_text) -> list[{cv_id, score, ...}]`
+
+### 3.5. LLM review (llama3) (khuyến nghị)
+- [x] Pull model chat: `docker compose exec ollama ollama pull llama3`
+- [x] Tạo LLM reviewer dựa trên top chunks từ Chroma (`backend/services/llm_scorer.py`)
+- [x] UI button để generate review trong Streamlit
 
 ### 3.4. Chunking (khuyến nghị, tùy thời gian)
-- [ ] (Optional) Chunk CV text theo đoạn (ví dụ 800–1200 chars) trước khi index
-- [ ] (Optional) Score theo `max` chunk similarity cho mỗi CV
+- [x] Chunk CV text theo đoạn (mặc định 1000 chars, overlap 150)
+- [x] Score theo `max` chunk similarity cho mỗi CV (gom theo `cv_id`)
 
 ---
 
@@ -119,17 +124,18 @@ Tình trạng hiện tại: đa số CV mẫu là scan → cần OCR để Phase
 **Files:** `frontend/app.py`, `frontend/pages/1_CV_Screening.py`
 
 ### 4.1. Flow UI
-- [ ] Nhập/paste JD (textarea)
-- [ ] Upload nhiều CV (file_uploader, accept pdf)
-- [ ] Button `Run screening`
-- [ ] Hiển thị bảng ranking (pandas dataframe)
-- [ ] Chọn 1 CV để xem:
-  - [ ] raw_text preview (cắt ngắn)
+- [x] Nhập/paste JD (textarea)
+- [x] Upload JD (PDF/TXT) và tự parse
+- [x] Upload nhiều CV (file_uploader, accept pdf)
+- [x] Button `Run screening`
+- [x] Hiển thị bảng ranking (pandas dataframe)
+- [x] Chọn 1 CV để xem:
+  - [x] raw_text preview (cắt ngắn)
   - [ ] (optional) top matched snippet
 
 ### 4.2. Performance
-- [ ] Cache embeddings/store init bằng `st.cache_resource`
-- [ ] Hiển thị progress/status khi index nhiều CV
+- [x] Cache embeddings/store init bằng `st.cache_resource`
+- [x] Hiển thị progress/status khi index nhiều CV
 
 ---
 

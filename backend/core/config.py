@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,11 @@ class Settings:
     chroma_collection_cvs: str
 
     ollama_embed_model: str
+    ollama_base_url: str
+    ollama_chat_model: str
+
+    cv_chunk_size: int
+    cv_chunk_overlap: int
 
 
 def get_settings(project_root: Path | None = None) -> Settings:
@@ -33,6 +39,10 @@ def get_settings(project_root: Path | None = None) -> Settings:
         chroma_cv_screening_dir=chroma_dir / "cv_screening",
         chroma_collection_cvs="cvs",
         ollama_embed_model="nomic-embed-text",
+        ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+        ollama_chat_model=os.environ.get("OLLAMA_CHAT_MODEL", "llama3"),
+        cv_chunk_size=int(os.environ.get("CV_CHUNK_SIZE", "1000")),
+        cv_chunk_overlap=int(os.environ.get("CV_CHUNK_OVERLAP", "150")),
     )
 
 

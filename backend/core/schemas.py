@@ -27,3 +27,13 @@ class CVRankResult:
     status: str  # "OK" | "ERROR"
     notes: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CVLLMReview:
+    cv_id: str
+    score: int  # 0-100
+    summary: str
+    strengths: List[str] = field(default_factory=list)
+    gaps: List[str] = field(default_factory=list)
+    evidence: List[str] = field(default_factory=list)

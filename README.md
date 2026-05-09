@@ -90,6 +90,9 @@ docker compose up --build
 
 # 2) Pull embeddings model (lần đầu)
 docker compose exec ollama ollama pull nomic-embed-text
+
+# 3) (Optional) Pull LLM chat model for review (llama3)
+docker compose exec ollama ollama pull llama3
 ```
 
 - Streamlit UI: `http://localhost:8501`

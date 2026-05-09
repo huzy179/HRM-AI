@@ -17,6 +17,8 @@ services:
     environment:
       # LangChain Ollama client will use this in Phase 1 matcher.
       - OLLAMA_BASE_URL=http://ollama:11434
+      - ANONYMIZED_TELEMETRY=False
+      - POSTHOG_DISABLED=1
     volumes:
       # Keep local data (CV samples and chroma_db) on host for convenience
       - ./data:/app/data
@@ -25,4 +27,3 @@ services:
 
 volumes:
   ollama:
-
