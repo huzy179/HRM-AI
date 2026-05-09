@@ -9,6 +9,36 @@ from backend.core.schemas import CVParseResult
 from backend.services.utils import normalize_text
 
 
+def _env_int(name: str, default: int) -> int:
+    import os
+
+    val = os.environ.get(name)
+    if not val:
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    import os
+
+    val = os.environ.get(name)
+    if not val:
+        return default
+    try:
+        return float(val)
+    except ValueError:
+        return default
+
+
+def _env_str(name: str, default: str) -> str:
+    import os
+
+    return os.environ.get(name, default)
+
+
 def extract_text_pymupdf(pdf_path: str | Path) -> str:
     path = Path(pdf_path)
     doc = fitz.open(path.as_posix())
@@ -55,14 +85,33 @@ def extract_text_ocr_pymupdf(pdf_path: str | Path) -> str:
     if tesseract_cmd:
         pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
+    # Tunables (Docker-friendly via env vars)
+    dpi = _env_int("OCR_DPI", 300)
+    # For Vietnamese CVs, install language pack `tesseract-ocr-vie` and set OCR_LANG="vie+eng"
+    lang = _env_str("OCR_LANG", "eng")
+    oem = _env_int("OCR_OEM", 1)  # LSTM
+    psm = _env_int("OCR_PSM", 6)  # Assume a uniform block of text
+    crop_ratio = _env_float("OCR_CROP_RATIO", 0.05)  # crop 5% margins by default
+
     path = Path(pdf_path)
     doc = fitz.open(path.as_posix())
     try:
         parts: list[str] = []
         for page in doc:
-            pix = page.get_pixmap(dpi=200)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            parts.append(pytesseract.image_to_string(img))
+            # Render grayscale to reduce noise
+            pix = page.get_pixmap(dpi=dpi, colorspace=fitz.csGRAY)
+            img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
+
+            # Crop margins to remove black borders / scan artifacts
+            if 0.0 < crop_ratio < 0.3:
+                w, h = img.size
+                dx = int(w * crop_ratio)
+                dy = int(h * crop_ratio)
+                if w - 2 * dx > 20 and h - 2 * dy > 20:
+                    img = img.crop((dx, dy, w - dx, h - dy))
+
+            config = f"--oem {oem} --psm {psm}"
+            parts.append(pytesseract.image_to_string(img, lang=lang, config=config))
         return "\n".join(parts)
     finally:
         doc.close()

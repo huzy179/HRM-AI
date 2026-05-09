@@ -34,6 +34,11 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - OCR_LANG=vie+eng
+      - OCR_DPI=300
+      - OCR_PSM=6
+      - OCR_OEM=1
+      - OCR_CROP_RATIO=0.05
       - ANONYMIZED_TELEMETRY=False
       - POSTHOG_DISABLED=1
     volumes:
@@ -53,6 +58,11 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - OCR_LANG=vie+eng
+      - OCR_DPI=300
+      - OCR_PSM=6
+      - OCR_OEM=1
+      - OCR_CROP_RATIO=0.05
       - ANONYMIZED_TELEMETRY=False
       - POSTHOG_DISABLED=1
     volumes:
@@ -73,6 +83,11 @@ services:
     environment:
       - API_BASE_URL=http://api:8000
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OCR_LANG=vie+eng
+      - OCR_DPI=300
+      - OCR_PSM=6
+      - OCR_OEM=1
+      - OCR_CROP_RATIO=0.05
       - ANONYMIZED_TELEMETRY=False
     volumes:
       - ./data:/app/data
