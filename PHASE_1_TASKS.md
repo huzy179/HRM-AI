@@ -53,23 +53,23 @@ Phase 1 được xem là hoàn thành khi:
 **File chính:** `backend/services/cv_parser.py`
 
 ### 2.1. Extract text từ PDF
-- [ ] Implement `extract_text_pymupdf(path) -> str`
-- [ ] Implement fallback `extract_text_pdfplumber(path) -> str`
-- [ ] Implement “normalize text”:
-  - [ ] chuẩn hoá unicode/whitespace
-  - [ ] remove line breaks thừa
+- [x] Implement `extract_text_pymupdf(path) -> str`
+- [x] Implement fallback `extract_text_pdfplumber(path) -> str`
+- [x] Implement “normalize text”:
+  - [x] chuẩn hoá unicode/whitespace
+  - [x] remove line breaks thừa
   - [ ] optional: remove header/footer lặp (để Phase 1.5 nếu lâu)
 
 ### 2.2. API/Interface tối thiểu
-- [ ] Implement `parse_cv(pdf_path) -> dict`
-  - [ ] trả về `cv_id`, `raw_text`, `error` nếu có
-- [ ] Thêm error handling:
-  - [ ] file không đọc được
-  - [ ] PDF scan (text rỗng) → trả warning “needs OCR” (Phase 1 không OCR)
+- [x] Implement `parse_cv(pdf_path) -> dict`
+  - [x] trả về `cv_id`, `raw_text`, `error` nếu có
+- [x] Thêm error handling:
+  - [x] file không đọc được
+  - [x] PDF scan (text rỗng) → trả warning “needs OCR” (Phase 1 không OCR)
 
 ### 2.3. Dữ liệu test
-- [ ] Thêm 5–10 CV mẫu vào `data/raw_cv/` (không commit nếu là dữ liệu thật)
-- [ ] Thêm 1–2 JD mẫu vào `data/sample_jd/` (txt)
+- [ ] Thêm 5–10 CV mẫu (PDF) vào `data/raw_cv/` (không commit nếu là dữ liệu thật)
+- [x] Thêm 1–2 JD mẫu vào `data/sample_jd/` (txt)
 
 ---
 

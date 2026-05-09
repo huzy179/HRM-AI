@@ -455,7 +455,7 @@ pdfplumber==0.10.3
 langchain==0.3.0
 langchain-ollama==0.2.0
 langchain-chroma==0.1.4
-chromadb==0.5.5
+chromadb==0.5.3
 
 # Data Processing
 pandas==2.1.3
