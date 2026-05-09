@@ -8,22 +8,78 @@ services:
     volumes:
       - ollama:/root/.ollama
 
-  app:
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=hrm
+      - POSTGRES_USER=hrm
+      - POSTGRES_PASSWORD=hrm
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
+      - REDIS_URL=redis://redis:6379/0
+      - ANONYMIZED_TELEMETRY=False
+      - POSTHOG_DISABLED=1
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+      - ollama
+    command: ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
+      - REDIS_URL=redis://redis:6379/0
+      - ANONYMIZED_TELEMETRY=False
+      - POSTHOG_DISABLED=1
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+      - ollama
+    command: ["python", "-m", "backend.worker.run_worker"]
+
+  frontend:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "8501:8501"
     environment:
-      # LangChain Ollama client will use this in Phase 1 matcher.
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - API_BASE_URL=http://api:8000
       - ANONYMIZED_TELEMETRY=False
-      - POSTHOG_DISABLED=1
     volumes:
-      # Keep local data (CV samples and chroma_db) on host for convenience
       - ./data:/app/data
+      - ./uploads:/app/uploads
     depends_on:
-      - ollama
+      - api
+    command: ["streamlit", "run", "frontend/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
 
 volumes:
   ollama:
+  postgres:
