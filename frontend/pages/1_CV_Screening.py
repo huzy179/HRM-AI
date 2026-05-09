@@ -167,13 +167,13 @@ def main() -> None:
             progress.progress(int(done / total * 100), text=f"Parsed {done}/{total}: {result.cv_id}")
 
         progress.progress(100, text="Indexing...")
-        matcher.index_cvs(parse_results)
+        index_status = matcher.index_cvs(parse_results)
+        index_by_id = {s.cv_id: s for s in index_status}
+
         df_parse = pd.DataFrame(cv_rows).sort_values(["error", "chars"], ascending=[True, False])
-        st.dataframe(df_parse, use_container_width=True)
+        df_parse["chunks"] = df_parse["cv_id"].map(lambda cid: (index_by_id.get(cid).metadata or {}).get("chunks"))
 
-        st.subheader("4) Rank")
         ranked = matcher.rank(jd_text=jd_text, k=50)
-
         ranked_by_id = {r.cv_id: r for r in ranked}
         rows = []
         for cv in parse_results:
@@ -184,7 +184,6 @@ def main() -> None:
                 rows.append({"cv_id": cv.cv_id, "score": 0.0, "status": "ERROR", "notes": cv.error or "NOT_RANKED"})
 
         df_rank = pd.DataFrame(rows).sort_values(["score", "cv_id"], ascending=[False, True])
-        st.dataframe(df_rank, use_container_width=True)
 
         screening.clear()
         screening.update(
@@ -201,7 +200,14 @@ def main() -> None:
     if df_rank is None:
         return
 
-    # Render persisted results so buttons work across reruns
+    st.subheader("3) Parse & Index")
+    df_parse = screening.get("df_parse")
+    if df_parse is not None:
+        ok_count = int((df_parse["error"].isna() | (df_parse["error"] == "")).sum())
+        total_count = int(len(df_parse))
+        st.caption(f"Parsed: {ok_count}/{total_count} OK (còn lại cần OCR hoặc lỗi).")
+        st.dataframe(df_parse, use_container_width=True)
+
     st.subheader("4) Rank")
     st.dataframe(df_rank, use_container_width=True)
 
@@ -224,6 +230,8 @@ def main() -> None:
     if st.button("🧠 Generate review (llama3)", type="secondary"):
         with st.spinner("Running llama3..."):
             evidence = matcher.evidence_chunks(jd_text=jd_text, cv_id=selected, k=80, top_n=3)
+            if not evidence:
+                st.warning("Không tìm thấy evidence chunks cho CV này (có thể CV chưa được index hoặc text rỗng).")
             review = review_with_llama3(cv_id=selected, jd_text=jd_text, evidence_chunks=evidence)
         screening["reviews"][selected] = review
 

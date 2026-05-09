@@ -97,3 +97,7 @@ docker compose exec ollama ollama pull llama3
 
 - Streamlit UI: `http://localhost:8501`
 - Ollama API: `http://localhost:11434`
+
+## 📌 Phase 1 Runbook
+
+Xem hướng dẫn chi tiết: `PHASE_1_RUNBOOK.md`

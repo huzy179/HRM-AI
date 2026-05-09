@@ -144,29 +144,28 @@ Tình trạng hiện tại: đa số CV mẫu là scan → cần OCR để Phase
 **Files:** `tests/test_cv_parser.py`, `tests/test_matcher.py`, `tests/test_e2e.py`
 
 ### 5.1. Unit tests — Parser
-- [ ] Test: parse được 1 PDF mẫu (nếu repo không có PDF mẫu thì mock/skip)
-- [ ] Test: normalize không trả về None, output type đúng
+- [x] Test: parse được 1 PDF mẫu (generate PDF bằng PyMuPDF trong test)
+- [x] Test: normalize không trả về None, output type đúng (covered by parser test)
 
 ### 5.2. Unit tests — Matcher
-- [ ] Test: index 1 đoạn text và query JD trả về score trong [0, 100]
-- [ ] Test: reset collection (nếu có) không crash
+- [x] Test: index 1 đoạn text và query JD trả về score trong [0, 100] (skip nếu Ollama không chạy)
+- [x] Test: reset collection (nếu có) không crash
 
 ### 5.3. E2E
-- [ ] Dùng 2–3 CV text (có thể text giả) + 1 JD text → rank list có thứ tự hợp lý
+- [x] Dùng 2–3 CV text (text giả) + 1 JD text → rank + review (skip nếu Ollama không chạy)
 
 ---
 
 ## 6) Documentation & Runbook (Day 12–14)
 
 ### 6.1. Run instructions
-- [ ] Cập nhật `README.md` hoặc thêm `PHASE_1_RUNBOOK.md`:
-  - [ ] cài Ollama + pull model
-  - [ ] cài deps python
-  - [ ] chạy streamlit
-  - [ ] chạy tests
+- [x] Cập nhật `README.md` hoặc thêm `PHASE_1_RUNBOOK.md`:
+  - [x] pull model (embeddings + llama3)
+  - [x] chạy streamlit (Docker)
+  - [x] chạy tests (Docker)
 
 ### 6.2. Báo cáo kết quả
-- [ ] Tạo `PHASE_1_RESULTS.md`:
+- [x] Tạo `PHASE_1_RESULTS.md` (template):
   - [ ] số CV test
   - [ ] tỉ lệ parse thành công
   - [ ] nhận xét chất lượng ranking

@@ -72,7 +72,7 @@ class CVMatcher:
             persist_directory=str(self.settings.chroma_cv_screening_dir),
         )
 
-    def index_cv(self, *, cv_id: str, cv_text: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def index_cv(self, *, cv_id: str, cv_text: str, metadata: Optional[Dict[str, Any]] = None) -> int:
         text = normalize_text(cv_text)
         chunks = [c for c in self.splitter.split_text(text) if c.strip()]
         if not chunks:
@@ -85,6 +85,7 @@ class CVMatcher:
             ids.append(f"{cv_id}::chunk_{idx}")
 
         self.store.add_texts(texts=chunks, metadatas=metadatas, ids=ids)
+        return len(chunks)
 
     def index_cvs(self, cvs: Sequence[CVParseResult]) -> List[CVRankResult]:
         """
@@ -98,8 +99,16 @@ class CVMatcher:
             if not cv.raw_text.strip():
                 results.append(CVRankResult(cv_id=cv.cv_id, score=0.0, status="ERROR", notes="EMPTY_TEXT"))
                 continue
-            self.index_cv(cv_id=cv.cv_id, cv_text=cv.raw_text, metadata={"filename": cv.cv_id})
-            results.append(CVRankResult(cv_id=cv.cv_id, score=0.0, status="OK", notes="INDEXED"))
+            chunk_count = self.index_cv(cv_id=cv.cv_id, cv_text=cv.raw_text, metadata={"filename": cv.cv_id})
+            results.append(
+                CVRankResult(
+                    cv_id=cv.cv_id,
+                    score=0.0,
+                    status="OK",
+                    notes=f"INDEXED chunks={chunk_count}",
+                    metadata={"chunks": chunk_count},
+                )
+            )
         return results
 
     def rank(self, *, jd_text: str, k: int = 20) -> List[CVRankResult]:
