@@ -72,12 +72,14 @@ services:
       - "8501:8501"
     environment:
       - API_BASE_URL=http://api:8000
+      - OLLAMA_BASE_URL=http://ollama:11434
       - ANONYMIZED_TELEMETRY=False
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
     depends_on:
       - api
+      - ollama
     command: ["streamlit", "run", "frontend/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
 
 volumes:
