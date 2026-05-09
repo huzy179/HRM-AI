@@ -23,11 +23,13 @@ Phase 1 được xem là hoàn thành khi:
 ## 1) Chuẩn bị & quy ước (Day 1)
 
 ### 1.1. Môi trường
-- [ ] Cài Python 3.10+
-- [ ] Tạo virtualenv (khuyến nghị `.venv/`)
-- [ ] Cài Ollama
-- [ ] Pull embeddings model: `ollama pull nomic-embed-text`
-- [x] Chuẩn bị dependencies Python (`backend/requirements.txt`)
+- [x] Chuẩn bị Docker (`Dockerfile`, `docker-compose.yml`)
+- [ ] Cài Docker Desktop (Windows)
+- [ ] Build & chạy stack:
+  - [ ] `docker compose up --build`
+- [ ] Pull embeddings model trong Ollama container:
+  - [ ] `docker compose exec ollama ollama pull nomic-embed-text`
+- [x] Chuẩn bị dependencies Python (`backend/requirements.txt`) (dùng cho Docker build)
 
 ### 1.2. Quy ước đường dẫn dữ liệu (local)
 - [x] CV test để ở `data/raw_cv/` (đã tạo thư mục + `.gitkeep`)
@@ -59,6 +61,7 @@ Phase 1 được xem là hoàn thành khi:
   - [x] chuẩn hoá unicode/whitespace
   - [x] remove line breaks thừa
   - [ ] optional: remove header/footer lặp (để Phase 1.5 nếu lâu)
+  - [x] (best-effort) OCR fallback cho PDF scan (cần cài thêm Tesseract + `pytesseract`)
 
 ### 2.2. API/Interface tối thiểu
 - [x] Implement `parse_cv(pdf_path) -> dict`
@@ -67,8 +70,15 @@ Phase 1 được xem là hoàn thành khi:
   - [x] file không đọc được
   - [x] PDF scan (text rỗng) → trả warning “needs OCR” (Phase 1 không OCR)
 
+### 2.4. OCR cho PDF scan (Docker-first)
+Tình trạng hiện tại: đa số CV mẫu là scan → cần OCR để Phase 1 chạy end-to-end.
+
+- [x] OCR engine được đóng gói trong Docker image (tesseract-ocr)
+- [x] `pytesseract` đã được thêm vào `backend/requirements.txt`
+- [ ] Re-test parser với thư mục `data/raw_cv/` (chạy trong container) và ghi lại tỉ lệ parse OK/needs OCR
+
 ### 2.3. Dữ liệu test
-- [ ] Thêm 5–10 CV mẫu (PDF) vào `data/raw_cv/` (không commit nếu là dữ liệu thật)
+- [x] Thêm 5–10 CV mẫu (PDF) vào `data/raw_cv/` (đã có file PDF local; không commit nếu là dữ liệu thật)
 - [x] Thêm 1–2 JD mẫu vào `data/sample_jd/` (txt)
 
 ---

@@ -1,0 +1,28 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama:/root/.ollama
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      # LangChain Ollama client will use this in Phase 1 matcher.
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      # Keep local data (CV samples and chroma_db) on host for convenience
+      - ./data:/app/data
+    depends_on:
+      - ollama
+
+volumes:
+  ollama:
+

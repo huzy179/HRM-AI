@@ -1,0 +1,13 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.vscode
+.idea
+
+# Local data (mounted via volume instead)
+data/chroma_db
+

@@ -76,3 +76,21 @@ hrm-ai-project/
 │
 ├── .gitignore                  # File ẩn những file không cần đưa lên Github
 └── README.md                   # File tài liệu bạn đang đọc
+```
+
+---
+
+## ▶️ Quick start (Docker)
+
+Yêu cầu: Docker Desktop (Windows).
+
+```bash
+# 1) Start stack
+docker compose up --build
+
+# 2) Pull embeddings model (lần đầu)
+docker compose exec ollama ollama pull nomic-embed-text
+```
+
+- Streamlit UI: `http://localhost:8501`
+- Ollama API: `http://localhost:11434`

@@ -32,6 +32,42 @@ def extract_text_pdfplumber(pdf_path: str | Path) -> str:
     return "\n".join(parts)
 
 
+def extract_text_ocr_pymupdf(pdf_path: str | Path) -> str:
+    """
+    OCR fallback for scanned PDFs (best-effort).
+
+    Requires:
+    - Python package `pytesseract`
+    - Tesseract OCR installed on the machine.
+
+    Optional:
+    - Set `TESSERACT_CMD` env var to the full path of `tesseract.exe`.
+    """
+    try:
+        import os
+
+        import pytesseract
+        from PIL import Image
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("OCR_DEPENDENCIES_MISSING") from exc
+
+    tesseract_cmd = os.environ.get("TESSERACT_CMD")
+    if tesseract_cmd:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+
+    path = Path(pdf_path)
+    doc = fitz.open(path.as_posix())
+    try:
+        parts: list[str] = []
+        for page in doc:
+            pix = page.get_pixmap(dpi=200)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            parts.append(pytesseract.image_to_string(img))
+        return "\n".join(parts)
+    finally:
+        doc.close()
+
+
 def parse_cv(pdf_path: str | Path, *, fallback_pdfplumber: bool = True) -> CVParseResult:
     path = Path(pdf_path)
     cv_id = path.name
@@ -45,6 +81,13 @@ def parse_cv(pdf_path: str | Path, *, fallback_pdfplumber: bool = True) -> CVPar
         if fallback_pdfplumber and not raw_text:
             raw_text = extract_text_pdfplumber(path)
             raw_text = normalize_text(raw_text)
+
+        if not raw_text:
+            try:
+                raw_text = extract_text_ocr_pymupdf(path)
+                raw_text = normalize_text(raw_text)
+            except Exception:
+                raw_text = ""
 
         if not raw_text:
             error = "EMPTY_TEXT_NEEDS_OCR"

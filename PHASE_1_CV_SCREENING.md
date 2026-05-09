@@ -406,6 +406,18 @@ Phase 1 hoàn thành khi:
 
 ## 🚀 Cách Chạy Phase 1
 
+### Chạy bằng Docker (khuyến nghị)
+```bash
+# Start stack
+docker compose up --build
+
+# Pull embeddings model (lần đầu)
+docker compose exec ollama ollama pull nomic-embed-text
+```
+
+- Streamlit UI: `http://localhost:8501`
+- Ollama API: `http://localhost:11434`
+
 ### Setup Environment
 ```bash
 # 1. Navigate to backend
@@ -472,6 +484,9 @@ python-dotenv==1.0.0
 
 # NLP (optional)
 spacy==3.7.2
+
+# OCR (optional, for scanned PDFs)
+pytesseract==0.3.10
 ```
 
 ---
