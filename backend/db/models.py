@@ -60,6 +60,7 @@ class ScreeningResult(Base):
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), nullable=False)
     score_embed: Mapped[float] = mapped_column(Float, nullable=False)
     notes: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    evidence_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

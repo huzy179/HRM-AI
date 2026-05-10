@@ -151,6 +151,7 @@ def get_ranking(campaign_id: int, session: SessionDep) -> dict:
         .order_by(models.ScreeningResult.score_embed.desc())
         .all()
     )
+    import json
     return {
         "campaign_id": campaign_id,
         "results": [
@@ -158,6 +159,7 @@ def get_ranking(campaign_id: int, session: SessionDep) -> dict:
                 "candidate_id": r.candidate_id,
                 "score": r.score_embed,
                 "notes": r.notes,
+                "evidence": json.loads(getattr(r, "evidence_json", "[]") or "[]"),
             }
             for r in rows
         ],

@@ -42,7 +42,7 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
         elif job_type == "review_candidate":
             _review_candidate(payload["campaign_id"], payload["candidate_id"], job_id)
         elif job_type == "policy_ingest":
-            _policy_ingest(job_id)
+            _policy_ingest(payload.get("doc_ids") or [], job_id)
         elif job_type == "policy_chat":
             _policy_chat(payload["query"], job_id)
         else:
@@ -118,12 +118,14 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
 
         for r in ranked:
             cand_id = int(r.cv_id)
+            evidence = matcher.evidence_chunks(jd_text=jd.text or "", cv_id=str(cand_id), k=80, top_n=3)
             session.add(
                 models.ScreeningResult(
                     campaign_id=campaign_id,
                     candidate_id=cand_id,
                     score_embed=float(r.score),
                     notes=r.notes,
+                    evidence_json=models.json_dumps(evidence),
                 )
             )
         session.commit()
@@ -169,18 +171,37 @@ def _review_candidate(campaign_id: int, candidate_id: int, job_id: str) -> None:
     _update_job(job_id, progress=100)
 
 
-def _policy_ingest(job_id: str) -> None:
+def _policy_ingest(doc_ids: list[int], job_id: str) -> None:
     session = SessionLocal()
     try:
-        pending = session.query(models.PolicyDocument).filter(models.PolicyDocument.ingest_status == "PENDING").all()
+        if doc_ids:
+            pending = (
+                session.query(models.PolicyDocument)
+                .filter(models.PolicyDocument.id.in_(doc_ids))
+                .order_by(models.PolicyDocument.id.asc())
+                .all()
+            )
+        else:
+            pending = (
+                session.query(models.PolicyDocument)
+                .filter(models.PolicyDocument.ingest_status == "PENDING")
+                .order_by(models.PolicyDocument.id.asc())
+                .all()
+            )
         total = max(len(pending), 1)
         rag = PolicyRAG()
         for idx, doc in enumerate(pending):
+            # mark running
+            doc.ingest_status = "RUNNING"
+            doc.error = None
+            session.commit()
+
             result = parse_cv(doc.file_path)
             doc.text = result.raw_text
             doc.ingest_status = "OK" if result.error is None else "ERROR"
             doc.error = result.error
             session.commit()
+
             if doc.ingest_status == "OK" and (doc.text or "").strip():
                 rag.ingest_text(doc_id=str(doc.id), source=doc.filename, text=doc.text or "")
             _update_job(job_id, progress=int((idx + 1) / total * 100))
