@@ -101,3 +101,7 @@ docker compose exec ollama ollama pull llama3
 ## 📌 Phase 1 Runbook
 
 Xem hướng dẫn chi tiết: `PHASE_1_RUNBOOK.md`
+
+## 📌 Phase 2 Runbook
+
+Xem hướng dẫn chi tiết: `PHASE_2_RUNBOOK.md`

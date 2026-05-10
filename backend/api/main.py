@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from backend.api.routes import campaigns, jobs, health
+from backend.api.routes import campaigns, jobs, health, policy
 
 
 def create_app() -> FastAPI:
@@ -11,9 +11,9 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=["health"])
     app.include_router(campaigns.router, prefix="/campaigns", tags=["campaigns"])
     app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
+    app.include_router(policy.router, prefix="/policy", tags=["policy"])
 
     return app
 
 
 app = create_app()
-

@@ -30,6 +30,15 @@ class CandidateOut(BaseModel):
     error: Optional[str] = None
 
 
+class ReviewOut(BaseModel):
+    candidate_id: int
+    score: int
+    summary: str
+    strengths: list[str]
+    gaps: list[str]
+    evidence: list[str]
+
+
 @router.post("", response_model=CampaignOut)
 def create_campaign(payload: CampaignCreate, session: SessionDep) -> CampaignOut:
     campaign = models.Campaign(name=payload.name)
@@ -154,3 +163,35 @@ def get_ranking(campaign_id: int, session: SessionDep) -> dict:
         ],
     }
 
+
+@router.post("/{campaign_id}/candidates/{candidate_id}/review")
+def start_review(campaign_id: int, candidate_id: int, session: SessionDep) -> dict:
+    campaign = session.get(models.Campaign, campaign_id)
+    cand = session.get(models.Candidate, candidate_id)
+    if campaign is None or cand is None or cand.campaign_id != campaign_id:
+        raise HTTPException(status_code=404, detail="Campaign/Candidate not found")
+
+    job_id = enqueue_job("review_candidate", {"campaign_id": campaign_id, "candidate_id": candidate_id})
+    return {"ok": True, "job_id": job_id}
+
+
+@router.get("/{campaign_id}/candidates/{candidate_id}/review", response_model=ReviewOut)
+def get_review(campaign_id: int, candidate_id: int, session: SessionDep) -> ReviewOut:
+    row = (
+        session.query(models.ReviewResult)
+        .filter(models.ReviewResult.campaign_id == campaign_id, models.ReviewResult.candidate_id == candidate_id)
+        .one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    import json
+
+    return ReviewOut(
+        candidate_id=candidate_id,
+        score=row.score_llm,
+        summary=row.summary,
+        strengths=json.loads(row.strengths_json or "[]"),
+        gaps=json.loads(row.gaps_json or "[]"),
+        evidence=json.loads(row.evidence_json or "[]"),
+    )

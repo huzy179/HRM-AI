@@ -7,6 +7,9 @@ from backend.db.session import SessionLocal
 from backend.db import models
 from backend.services.cv_parser import parse_cv
 from backend.services.matcher import CVMatcher
+from backend.core.config import settings_for_campaign
+from backend.services.llm_scorer import review_with_llama3
+from backend.services.policy_rag import PolicyRAG
 
 
 def _update_job(job_id: str, *, status: str | None = None, progress: int | None = None, error: str | None = None) -> None:
@@ -36,6 +39,12 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
             _parse_cvs(payload["campaign_id"], job_id)
         elif job_type == "screen_campaign":
             _screen_campaign(payload["campaign_id"], job_id)
+        elif job_type == "review_candidate":
+            _review_candidate(payload["campaign_id"], payload["candidate_id"], job_id)
+        elif job_type == "policy_ingest":
+            _policy_ingest(job_id)
+        elif job_type == "policy_chat":
+            _policy_chat(payload["query"], job_id)
         else:
             raise ValueError(f"Unknown job type: {job_type}")
 
@@ -95,8 +104,8 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
         )
         ok_candidates = [c for c in candidates if (c.parse_status == "OK") and (c.text or "").strip()]
 
-        # Phase 2 simplification: reuse existing matcher but isolate per-campaign in its own chroma dir
-        matcher = CVMatcher()
+        settings = settings_for_campaign(campaign_id)
+        matcher = CVMatcher(settings)
         matcher.reset_collection()
 
         for cand in ok_candidates:
@@ -122,3 +131,63 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
         session.close()
     _update_job(job_id, progress=100)
 
+
+def _review_candidate(campaign_id: int, candidate_id: int, job_id: str) -> None:
+    session = SessionLocal()
+    try:
+        jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one_or_none()
+        cand = session.get(models.Candidate, candidate_id)
+        if jd is None or not (jd.text or "").strip():
+            raise RuntimeError("JD_NOT_READY")
+        if cand is None or cand.campaign_id != campaign_id:
+            raise RuntimeError("CANDIDATE_NOT_FOUND")
+        if cand.parse_status != "OK" or not (cand.text or "").strip():
+            raise RuntimeError("CANDIDATE_TEXT_NOT_READY")
+
+        settings = settings_for_campaign(campaign_id)
+        matcher = CVMatcher(settings)
+        evidence = matcher.evidence_chunks(jd_text=jd.text or "", cv_id=str(candidate_id), k=80, top_n=3)
+        review = review_with_llama3(cv_id=str(candidate_id), jd_text=jd.text or "", evidence_chunks=evidence, settings=settings)
+
+        existing = (
+            session.query(models.ReviewResult)
+            .filter(models.ReviewResult.campaign_id == campaign_id, models.ReviewResult.candidate_id == candidate_id)
+            .one_or_none()
+        )
+        if existing is None:
+            existing = models.ReviewResult(campaign_id=campaign_id, candidate_id=candidate_id)
+            session.add(existing)
+
+        existing.score_llm = int(review.score)
+        existing.summary = review.summary
+        existing.strengths_json = models.json_dumps(review.strengths)
+        existing.gaps_json = models.json_dumps(review.gaps)
+        existing.evidence_json = models.json_dumps(review.evidence)
+        session.commit()
+    finally:
+        session.close()
+    _update_job(job_id, progress=100)
+
+
+def _policy_ingest(job_id: str) -> None:
+    session = SessionLocal()
+    try:
+        pending = session.query(models.PolicyDocument).filter(models.PolicyDocument.ingest_status == "PENDING").all()
+        total = max(len(pending), 1)
+        rag = PolicyRAG()
+        for idx, doc in enumerate(pending):
+            result = parse_cv(doc.file_path)
+            doc.text = result.raw_text
+            doc.ingest_status = "OK" if result.error is None else "ERROR"
+            doc.error = result.error
+            session.commit()
+            if doc.ingest_status == "OK" and (doc.text or "").strip():
+                rag.ingest_text(doc_id=str(doc.id), source=doc.filename, text=doc.text or "")
+            _update_job(job_id, progress=int((idx + 1) / total * 100))
+    finally:
+        session.close()
+
+
+def _policy_chat(query: str, job_id: str) -> None:
+    # Placeholder: Phase 2 policy chat implemented in dedicated module in next step
+    _update_job(job_id, progress=100)

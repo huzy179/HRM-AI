@@ -52,3 +52,26 @@ def ensure_dirs(settings: Settings | None = None) -> None:
     s.sample_jd_dir.mkdir(parents=True, exist_ok=True)
     s.policy_docs_dir.mkdir(parents=True, exist_ok=True)
     s.chroma_cv_screening_dir.mkdir(parents=True, exist_ok=True)
+
+
+def settings_for_campaign(campaign_id: int, project_root: Path | None = None) -> Settings:
+    """
+    Return Settings with an isolated Chroma directory/collection per campaign.
+    This avoids cross-campaign contamination and allows parallel campaigns.
+    """
+    base = get_settings(project_root)
+    chroma_dir = base.chroma_dir / f"campaign_{campaign_id}"
+    return Settings(
+        project_root=base.project_root,
+        raw_cv_dir=base.raw_cv_dir,
+        sample_jd_dir=base.sample_jd_dir,
+        policy_docs_dir=base.policy_docs_dir,
+        chroma_dir=chroma_dir,
+        chroma_cv_screening_dir=chroma_dir / "cv_screening",
+        chroma_collection_cvs=f"cvs_campaign_{campaign_id}",
+        ollama_embed_model=base.ollama_embed_model,
+        ollama_base_url=base.ollama_base_url,
+        ollama_chat_model=base.ollama_chat_model,
+        cv_chunk_size=base.cv_chunk_size,
+        cv_chunk_overlap=base.cv_chunk_overlap,
+    )
