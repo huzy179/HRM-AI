@@ -117,24 +117,61 @@ def extract_text_ocr_pymupdf(pdf_path: str | Path) -> str:
         doc.close()
 
 
+def extract_text_ocr_image(image_path: str | Path) -> str:
+    """
+    OCR for image scans (png/jpg/jpeg).
+    """
+    try:
+        import os
+
+        import pytesseract
+        from PIL import Image
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("OCR_DEPENDENCIES_MISSING") from exc
+
+    tesseract_cmd = os.environ.get("TESSERACT_CMD")
+    if tesseract_cmd:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+
+    lang = _env_str("OCR_LANG", "eng")
+    oem = _env_int("OCR_OEM", 1)
+    psm = _env_int("OCR_PSM", 6)
+    crop_ratio = _env_float("OCR_CROP_RATIO", 0.05)
+
+    img = Image.open(Path(image_path)).convert("L")
+    if 0.0 < crop_ratio < 0.3:
+        w, h = img.size
+        dx = int(w * crop_ratio)
+        dy = int(h * crop_ratio)
+        if w - 2 * dx > 20 and h - 2 * dy > 20:
+            img = img.crop((dx, dy, w - dx, h - dy))
+
+    config = f"--oem {oem} --psm {psm}"
+    return pytesseract.image_to_string(img, lang=lang, config=config)
+
+
 def parse_cv(pdf_path: str | Path, *, fallback_pdfplumber: bool = True) -> CVParseResult:
     path = Path(pdf_path)
     cv_id = path.name
 
     error: Optional[str] = None
     raw_text = ""
+    method = "unknown"
     try:
         raw_text = extract_text_pymupdf(path)
         raw_text = normalize_text(raw_text)
+        method = "pymupdf"
 
         if fallback_pdfplumber and not raw_text:
             raw_text = extract_text_pdfplumber(path)
             raw_text = normalize_text(raw_text)
+            method = "pdfplumber"
 
         if not raw_text:
             try:
                 raw_text = extract_text_ocr_pymupdf(path)
                 raw_text = normalize_text(raw_text)
+                method = "ocr_pdf"
             except Exception:
                 raw_text = ""
 
@@ -143,4 +180,26 @@ def parse_cv(pdf_path: str | Path, *, fallback_pdfplumber: bool = True) -> CVPar
     except Exception as exc:  # noqa: BLE001
         error = f"PARSE_ERROR: {exc.__class__.__name__}: {exc}"
 
-    return CVParseResult(cv_id=cv_id, raw_text=raw_text, error=error)
+    return CVParseResult(cv_id=cv_id, raw_text=raw_text, error=error, method=method)
+
+
+def parse_file(path: str | Path) -> CVParseResult:
+    """
+    Parse either PDF (text/OCR) or image scan (OCR).
+    Supported: .pdf, .png, .jpg, .jpeg
+    """
+    p = Path(path)
+    suffix = p.suffix.lower()
+    if suffix in {".png", ".jpg", ".jpeg"}:
+        try:
+            text = normalize_text(extract_text_ocr_image(p))
+            err = None if text else "EMPTY_TEXT_NEEDS_OCR"
+            return CVParseResult(cv_id=p.name, raw_text=text, error=err, method="ocr_image")
+        except Exception as exc:  # noqa: BLE001
+            return CVParseResult(
+                cv_id=p.name,
+                raw_text="",
+                error=f"PARSE_ERROR: {exc.__class__.__name__}: {exc}",
+                method="ocr_image",
+            )
+    return parse_cv(p)

@@ -31,6 +31,7 @@ class JobDescription(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     parse_status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    parse_method: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -46,6 +47,7 @@ class Candidate(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     parse_status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    parse_method: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -86,6 +88,7 @@ class PolicyDocument(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     ingest_status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    ingest_method: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 

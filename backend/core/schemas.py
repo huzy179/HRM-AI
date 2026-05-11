@@ -18,6 +18,7 @@ class CVParseResult:
     raw_text: str
     extracted: CVExtracted = field(default_factory=CVExtracted)
     error: Optional[str] = None
+    method: str = "unknown"  # pymupdf | pdfplumber | ocr_pdf | ocr_image | unknown
 
 
 @dataclass(frozen=True)

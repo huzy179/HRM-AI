@@ -66,7 +66,7 @@ def main() -> None:
 
     with col_b:
         st.subheader("2) Upload JD (PDF/TXT)")
-        jd = st.file_uploader("JD file", type=["pdf", "txt"], accept_multiple_files=False)
+        jd = st.file_uploader("JD file (PDF/TXT/PNG/JPG)", type=["pdf", "txt", "png", "jpg", "jpeg"], accept_multiple_files=False)
         if st.button("Upload JD") and jd is not None:
             files = {"file": (jd.name, jd.getvalue(), "application/octet-stream")}
             res = requests.post(_api(f"/campaigns/{campaign_id}/jd"), files=files, timeout=120).json()
@@ -74,9 +74,9 @@ def main() -> None:
             st.session_state["last_job_id"] = res.get("job_id")
 
     st.subheader("3) Upload CVs (PDF)")
-    cvs = st.file_uploader("CV PDFs", type=["pdf"], accept_multiple_files=True)
+    cvs = st.file_uploader("CV files (PDF/PNG/JPG)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True)
     if st.button("Upload CVs") and cvs:
-        files = [("files", (f.name, f.getvalue(), "application/pdf")) for f in cvs]
+        files = [("files", (f.name, f.getvalue(), "application/octet-stream")) for f in cvs]
         res = requests.post(_api(f"/campaigns/{campaign_id}/cvs"), files=files, timeout=300).json()
         st.json(res)
         st.session_state["last_job_id"] = res.get("job_id")
@@ -91,6 +91,9 @@ def main() -> None:
         st.session_state["candidates"] = requests.get(_api(f"/campaigns/{campaign_id}/candidates"), timeout=30).json()
     candidates = st.session_state.get("candidates") or requests.get(_api(f"/campaigns/{campaign_id}/candidates"), timeout=30).json()
     df_cand = pd.DataFrame(candidates) if candidates else pd.DataFrame(columns=["id", "filename", "parse_status", "error"])
+    if not df_cand.empty:
+        cols = [c for c in ["id", "filename", "parse_status", "parse_method", "chars", "error"] if c in df_cand.columns]
+        df_cand = df_cand[cols]
     st.dataframe(df_cand, use_container_width=True)
 
     st.subheader("6) Screening")
@@ -128,4 +131,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

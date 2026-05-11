@@ -28,6 +28,8 @@ class CandidateOut(BaseModel):
     filename: str
     parse_status: str
     error: Optional[str] = None
+    parse_method: str = "unknown"
+    chars: int = 0
 
 
 class ReviewOut(BaseModel):
@@ -128,7 +130,14 @@ def list_candidates(campaign_id: int, session: SessionDep) -> List[CandidateOut]
         .all()
     )
     return [
-        CandidateOut(id=r.id, filename=r.filename, parse_status=r.parse_status, error=r.error)
+        CandidateOut(
+            id=r.id,
+            filename=r.filename,
+            parse_status=r.parse_status,
+            error=r.error,
+            parse_method=getattr(r, "parse_method", "unknown") or "unknown",
+            chars=len((r.text or "").strip()),
+        )
         for r in rows
     ]
 

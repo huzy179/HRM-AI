@@ -5,7 +5,7 @@ from pathlib import Path
 
 from backend.db.session import SessionLocal
 from backend.db import models
-from backend.services.cv_parser import parse_cv
+from backend.services.cv_parser import parse_file
 from backend.services.matcher import CVMatcher
 from backend.core.config import settings_for_campaign
 from backend.services.llm_scorer import review_with_llama3
@@ -58,9 +58,10 @@ def _parse_jd(campaign_id: int, job_id: str) -> None:
     session = SessionLocal()
     try:
         jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one()
-        result = parse_cv(jd.file_path)
+        result = parse_file(jd.file_path)
         jd.text = result.raw_text
         jd.parse_status = "OK" if result.error is None else "ERROR"
+        jd.parse_method = result.method
         jd.error = result.error
         session.commit()
     finally:
@@ -79,9 +80,10 @@ def _parse_cvs(campaign_id: int, job_id: str) -> None:
         )
         total = max(len(candidates), 1)
         for idx, cand in enumerate(candidates):
-            result = parse_cv(cand.file_path)
+            result = parse_file(cand.file_path)
             cand.text = result.raw_text
             cand.parse_status = "OK" if result.error is None else "ERROR"
+            cand.parse_method = result.method
             cand.error = result.error
             session.commit()
             _update_job(job_id, progress=int((idx + 1) / total * 100))
@@ -196,9 +198,10 @@ def _policy_ingest(doc_ids: list[int], job_id: str) -> None:
             doc.error = None
             session.commit()
 
-            result = parse_cv(doc.file_path)
+            result = parse_file(doc.file_path)
             doc.text = result.raw_text
             doc.ingest_status = "OK" if result.error is None else "ERROR"
+            doc.ingest_method = result.method
             doc.error = result.error
             session.commit()
 
