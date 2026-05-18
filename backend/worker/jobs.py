@@ -12,6 +12,8 @@ from backend.services.matcher import CVMatcher
 from backend.core.config import settings_for_campaign
 from backend.services.llm_scorer import review_with_llama3
 from backend.services.policy_rag import PolicyRAG
+from backend.services.text_quality import assess_text_quality
+from backend.services.profile_extractor import extract_candidate_profile
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,8 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
             _review_candidate(payload["campaign_id"], payload["candidate_id"], job_id)
         elif job_type == "policy_ingest":
             _policy_ingest(payload.get("doc_ids") or [], job_id)
+        elif job_type == "extract_profile":
+            _extract_profile(payload["campaign_id"], payload["candidate_id"], job_id)
         else:
             raise ValueError(f"Unknown job type: {job_type}")
 
@@ -73,6 +77,12 @@ def _parse_jd(campaign_id: int, job_id: str) -> None:
         jd.parse_status = "OK" if result.error is None else "ERROR"
         jd.parse_method = result.method
         jd.error = result.error
+        if result.error is None and (result.raw_text or "").strip() and result.method.startswith("ocr_"):
+            q = assess_text_quality(result.raw_text)
+            if not q.ok:
+                jd.parse_status = "ERROR"
+                jd.error = f"OCR_LOW_QUALITY:{q.reason}"
+                jd.text = None
         session.commit()
     finally:
         session.close()
@@ -95,9 +105,25 @@ def _parse_cvs(campaign_id: int, job_id: str) -> None:
                 continue
             result = parse_file(cand.file_path)
             cand.text = result.raw_text
-            cand.parse_status = "OK" if result.error is None else "ERROR"
             cand.parse_method = result.method
-            cand.error = result.error
+            cand.parse_chars = len((result.raw_text or "").strip())
+
+            if result.error is None and (result.raw_text or "").strip() and result.method.startswith("ocr_"):
+                q = assess_text_quality(result.raw_text)
+                cand.quality_score = float(q.score)
+                cand.quality_reason = q.reason if not q.ok else ""
+                if not q.ok:
+                    cand.parse_status = "ERROR"
+                    cand.error = f"OCR_LOW_QUALITY:{q.reason}"
+                    cand.text = ""
+                else:
+                    cand.parse_status = "OK"
+                    cand.error = None
+            else:
+                cand.quality_score = 0.0
+                cand.quality_reason = ""
+                cand.parse_status = "OK" if result.error is None else "ERROR"
+                cand.error = result.error
             session.commit()
             _update_job(job_id, progress=int((idx + 1) / total * 100))
     finally:
@@ -223,8 +249,50 @@ def _policy_ingest(doc_ids: list[int], job_id: str) -> None:
             doc.error = result.error
             session.commit()
 
+            if doc.ingest_status == "OK" and (doc.text or "").strip() and result.method.startswith("ocr_"):
+                q = assess_text_quality(doc.text or "")
+                if not q.ok:
+                    doc.ingest_status = "ERROR"
+                    doc.error = f"OCR_LOW_QUALITY:{q.reason}"
+                    doc.text = None
+                    session.commit()
+
             if doc.ingest_status == "OK" and (doc.text or "").strip():
                 rag.ingest_text(doc_id=str(doc.id), source=doc.filename, text=doc.text or "")
             _update_job(job_id, progress=int((idx + 1) / total * 100))
     finally:
         session.close()
+
+
+def _extract_profile(campaign_id: int, candidate_id: int, job_id: str) -> None:
+    session = SessionLocal()
+    try:
+        cand = session.get(models.Candidate, candidate_id)
+        if cand is None or cand.campaign_id != campaign_id:
+            raise RuntimeError("CANDIDATE_NOT_FOUND")
+        if cand.parse_status != "OK" or not (cand.text or "").strip():
+            raise RuntimeError("CANDIDATE_TEXT_NOT_READY")
+
+        extracted = extract_candidate_profile(cand.text or "")
+
+        existing = (
+            session.query(models.CandidateProfile)
+            .filter(models.CandidateProfile.candidate_id == candidate_id)
+            .one_or_none()
+        )
+        if existing is None:
+            existing = models.CandidateProfile(candidate_id=candidate_id)
+            session.add(existing)
+
+        existing.name = extracted.name
+        existing.email = extracted.email
+        existing.phone = extracted.phone
+        existing.years_experience = float(extracted.years_experience or 0.0)
+        existing.education = extracted.education
+        existing.skills_json = models.json_dumps(extracted.skills or [])
+        existing.updated_at = datetime.utcnow()
+
+        session.commit()
+    finally:
+        session.close()
+    _update_job(job_id, progress=100)

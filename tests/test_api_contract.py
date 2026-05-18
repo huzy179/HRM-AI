@@ -66,6 +66,11 @@ def test_campaign_crud_and_uploads(tmp_path: Path, monkeypatch) -> None:
     assert body["job_id"] == "job_test_1"
     assert len(body["candidate_ids"]) == 2
 
+    cand_id = body["candidate_ids"][0]
+    r = client.post(f"/campaigns/{camp_id}/candidates/{cand_id}/profile")
+    assert r.status_code == 200
+    assert r.json()["job_id"] == "job_test_1"
+
 
 def test_policy_ingest_contract(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
@@ -82,4 +87,3 @@ def test_policy_ingest_contract(tmp_path: Path, monkeypatch) -> None:
     assert body["ok"] is True
     assert body["job_id"] == "job_test_2"
     assert body["doc_ids"]
-

@@ -49,9 +49,28 @@ class Candidate(Base):
     parse_status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
     parse_method: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parse_chars: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    quality_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    quality_reason: Mapped[str] = mapped_column(String(100), default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     campaign: Mapped[Campaign] = relationship(back_populates="candidates")
+
+
+class CandidateProfile(Base):
+    __tablename__ = "candidate_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), nullable=False, unique=True)
+
+    name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    email: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    phone: Mapped[str] = mapped_column(String(50), default="", nullable=False)
+    years_experience: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    education: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    skills_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class ScreeningResult(Base):

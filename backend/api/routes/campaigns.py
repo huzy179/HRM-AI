@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from backend.db.session import SessionDep
 from backend.db import models
 from backend.worker.queue import enqueue_job
+from backend.api.upload_limits import ensure_file_count, read_limited
 
 
 router = APIRouter()
@@ -30,6 +31,8 @@ class CandidateOut(BaseModel):
     error: Optional[str] = None
     parse_method: str = "unknown"
     chars: int = 0
+    quality_score: float = 0.0
+    quality_reason: str = ""
 
 
 class ReviewOut(BaseModel):
@@ -39,6 +42,16 @@ class ReviewOut(BaseModel):
     strengths: list[str]
     gaps: list[str]
     evidence: list[str]
+
+
+class CandidateProfileOut(BaseModel):
+    candidate_id: int
+    name: str
+    email: str
+    phone: str
+    years_experience: float
+    education: str
+    skills: list[str]
 
 
 @router.post("", response_model=CampaignOut)
@@ -73,7 +86,7 @@ async def upload_jd(campaign_id: int, session: SessionDep, file: UploadFile = Fi
     uploads_dir = Path("uploads") / f"campaign_{campaign_id}" / "jd"
     uploads_dir.mkdir(parents=True, exist_ok=True)
     dest = uploads_dir / file.filename
-    content = await file.read()
+    content = await read_limited(file)
     dest.write_bytes(content)
 
     jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one_or_none()
@@ -98,13 +111,14 @@ async def upload_cvs(campaign_id: int, session: SessionDep, files: List[UploadFi
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
+    ensure_file_count(len(files))
     uploads_dir = Path("uploads") / f"campaign_{campaign_id}" / "cvs"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     created: List[int] = []
     for up in files:
         dest = uploads_dir / up.filename
-        dest.write_bytes(await up.read())
+        dest.write_bytes(await read_limited(up))
         cand = models.Candidate(
             campaign_id=campaign_id,
             filename=up.filename,
@@ -137,6 +151,8 @@ def list_candidates(campaign_id: int, session: SessionDep) -> List[CandidateOut]
             error=r.error,
             parse_method=getattr(r, "parse_method", "unknown") or "unknown",
             chars=len((r.text or "").strip()),
+            quality_score=float(getattr(r, "quality_score", 0.0) or 0.0),
+            quality_reason=str(getattr(r, "quality_reason", "") or ""),
         )
         for r in rows
     ]
@@ -184,6 +200,43 @@ def start_review(campaign_id: int, candidate_id: int, session: SessionDep) -> di
 
     job_id = enqueue_job("review_candidate", {"campaign_id": campaign_id, "candidate_id": candidate_id})
     return {"ok": True, "job_id": job_id}
+
+
+@router.post("/{campaign_id}/candidates/{candidate_id}/profile")
+def start_profile_extract(campaign_id: int, candidate_id: int, session: SessionDep) -> dict:
+    campaign = session.get(models.Campaign, campaign_id)
+    cand = session.get(models.Candidate, candidate_id)
+    if campaign is None or cand is None or cand.campaign_id != campaign_id:
+        raise HTTPException(status_code=404, detail="Campaign/Candidate not found")
+    job_id = enqueue_job("extract_profile", {"campaign_id": campaign_id, "candidate_id": candidate_id})
+    return {"ok": True, "job_id": job_id}
+
+
+@router.get("/{campaign_id}/candidates/{candidate_id}/profile", response_model=CandidateProfileOut)
+def get_profile(campaign_id: int, candidate_id: int, session: SessionDep) -> CandidateProfileOut:
+    cand = session.get(models.Candidate, candidate_id)
+    if cand is None or cand.campaign_id != campaign_id:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    row = (
+        session.query(models.CandidateProfile)
+        .filter(models.CandidateProfile.candidate_id == candidate_id)
+        .one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    import json
+
+    return CandidateProfileOut(
+        candidate_id=candidate_id,
+        name=row.name,
+        email=row.email,
+        phone=row.phone,
+        years_experience=float(row.years_experience or 0.0),
+        education=row.education,
+        skills=json.loads(row.skills_json or "[]"),
+    )
 
 
 @router.get("/{campaign_id}/candidates/{candidate_id}/review", response_model=ReviewOut)

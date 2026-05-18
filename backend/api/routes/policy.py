@@ -10,6 +10,7 @@ from backend.db.session import SessionDep
 from backend.db import models
 from backend.worker.queue import enqueue_job
 from backend.services.policy_rag import PolicyRAG
+from backend.api.upload_limits import ensure_file_count, read_limited
 
 
 router = APIRouter()
@@ -30,10 +31,11 @@ async def ingest_policy(session: SessionDep, files: List[UploadFile] = File(...)
     uploads_dir = Path("uploads") / "policy"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
+    ensure_file_count(len(files))
     doc_ids: list[int] = []
     for f in files:
         dest = uploads_dir / f.filename
-        dest.write_bytes(await f.read())
+        dest.write_bytes(await read_limited(f))
         doc = models.PolicyDocument(filename=f.filename, file_path=str(dest), ingest_status="PENDING")
         session.add(doc)
         session.flush()
@@ -52,4 +54,3 @@ def chat_policy(payload: PolicyChatIn) -> PolicyChatOut:
         answer=ans.answer,
         citations=[{"source": c.source, "chunk_id": c.chunk_id, "score": c.score, "snippet": c.snippet} for c in ans.citations],
     )
-

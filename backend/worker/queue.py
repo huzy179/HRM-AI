@@ -23,6 +23,7 @@ JOB_TYPE_TO_QUEUE: dict[str, str] = {
     # Index/rank (embedding + chroma)
     "screen_campaign": QUEUE_INDEX,
     "policy_ingest": QUEUE_INDEX,
+    "extract_profile": QUEUE_INDEX,
     # LLM calls
     "review_candidate": QUEUE_LLM,
 }

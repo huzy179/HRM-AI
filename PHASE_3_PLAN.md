@@ -45,6 +45,20 @@
 - Thêm API contract tests (sqlite + mock queue):
   - `tests/test_api_contract.py`
 
+### 5) Upload limits (API)
+- Env vars:
+  - `MAX_UPLOAD_BYTES` (default 20MB)
+  - `MAX_UPLOAD_FILES` (default 50)
+- Áp dụng cho:
+  - `POST /campaigns/{id}/jd`
+  - `POST /campaigns/{id}/cvs`
+  - `POST /policy/ingest`
+
+### 6) Text quality gate (OCR)
+- Nếu `parse_method` là `ocr_*` và text bị đánh giá rác → set status `ERROR`, error `OCR_LOW_QUALITY:<reason>`.
+- Candidates có metrics:
+  - `parse_chars`, `quality_score`, `quality_reason`
+
 ## Ghi chú môi trường dev
 
 - API upload dùng `python-multipart` (đã có trong `backend/requirements.txt`).
