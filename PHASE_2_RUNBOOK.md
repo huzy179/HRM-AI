@@ -6,6 +6,10 @@
 docker compose up --build
 ```
 
+> Gợi ý: nếu muốn scale theo loại job, có thể chạy thêm các worker chuyên biệt:
+> - `docker compose up --build worker_parse worker_index worker_llm`
+> (service `worker` (legacy, nghe tất cả queue) chỉ chạy khi bật profile: `docker compose --profile legacy up --build worker`)
+
 ## Run migrations
 
 ```bash
@@ -53,4 +57,3 @@ docker compose exec ollama ollama pull llama3
 ```bash
 docker compose down
 ```
-

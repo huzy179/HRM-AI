@@ -16,6 +16,12 @@
   - `index`: `screen_campaign`, `policy_ingest`
   - `llm`: `review_candidate`
 - Worker lắng nghe nhiều queue qua env `WORKER_QUEUES=parse,index,llm,default`.
+- (Tuỳ chọn, khuyến nghị cho demo ổn định) Tách nhiều worker service để scale độc lập:
+  - `worker_parse` nghe `parse,default`
+  - `worker_index` nghe `index,default`
+  - `worker_llm` nghe `llm,default`
+- Tránh chạy trùng: service `worker` (all-in-one) được đặt trong profile `legacy` và chỉ chạy khi:
+  - `docker compose --profile legacy up --build worker`
 
 ### 1) Reliability (Ollama)
 - Thêm env vars:
@@ -36,3 +42,9 @@
 
 ### 4) Tests
 - Thêm `tests/test_policy_rag_e2e.py` (skip nếu Ollama không sẵn sàng).
+- Thêm API contract tests (sqlite + mock queue):
+  - `tests/test_api_contract.py`
+
+## Ghi chú môi trường dev
+
+- API upload dùng `python-multipart` (đã có trong `backend/requirements.txt`).

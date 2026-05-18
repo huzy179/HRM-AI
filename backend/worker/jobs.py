@@ -64,6 +64,10 @@ def _parse_jd(campaign_id: int, job_id: str) -> None:
     session = SessionLocal()
     try:
         jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one()
+        if jd.parse_status == "OK" and (jd.text or "").strip() and not (jd.error or "").strip():
+            logger.info("parse_jd.skip campaign_id=%s reason=already_ok", campaign_id)
+            _update_job(job_id, progress=100)
+            return
         result = parse_file(jd.file_path)
         jd.text = result.raw_text
         jd.parse_status = "OK" if result.error is None else "ERROR"
@@ -86,6 +90,9 @@ def _parse_cvs(campaign_id: int, job_id: str) -> None:
         )
         total = max(len(candidates), 1)
         for idx, cand in enumerate(candidates):
+            if cand.parse_status == "OK" and (cand.text or "").strip() and not (cand.error or "").strip():
+                _update_job(job_id, progress=int((idx + 1) / total * 100))
+                continue
             result = parse_file(cand.file_path)
             cand.text = result.raw_text
             cand.parse_status = "OK" if result.error is None else "ERROR"
@@ -154,16 +161,21 @@ def _review_candidate(campaign_id: int, candidate_id: int, job_id: str) -> None:
         if cand.parse_status != "OK" or not (cand.text or "").strip():
             raise RuntimeError("CANDIDATE_TEXT_NOT_READY")
 
-        settings = settings_for_campaign(campaign_id)
-        matcher = CVMatcher(settings)
-        evidence = matcher.evidence_chunks(jd_text=jd.text or "", cv_id=str(candidate_id), k=80, top_n=3)
-        review = review_with_llama3(cv_id=str(candidate_id), jd_text=jd.text or "", evidence_chunks=evidence, settings=settings)
-
         existing = (
             session.query(models.ReviewResult)
             .filter(models.ReviewResult.campaign_id == campaign_id, models.ReviewResult.candidate_id == candidate_id)
             .one_or_none()
         )
+        if existing is not None and (existing.summary or "").strip():
+            logger.info("review_candidate.skip campaign_id=%s candidate_id=%s reason=already_done", campaign_id, candidate_id)
+            _update_job(job_id, progress=100)
+            return
+
+        settings = settings_for_campaign(campaign_id)
+        matcher = CVMatcher(settings)
+        evidence = matcher.evidence_chunks(jd_text=jd.text or "", cv_id=str(candidate_id), k=80, top_n=3)
+        review = review_with_llama3(cv_id=str(candidate_id), jd_text=jd.text or "", evidence_chunks=evidence, settings=settings)
+
         if existing is None:
             existing = models.ReviewResult(campaign_id=campaign_id, candidate_id=candidate_id)
             session.add(existing)
