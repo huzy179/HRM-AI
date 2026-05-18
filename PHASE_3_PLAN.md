@@ -10,6 +10,13 @@
 
 ## Checklist triển khai
 
+### 0) Queue tách lớp (khuyến nghị)
+- Route job theo queue:
+  - `parse`: `parse_jd`, `parse_cvs`
+  - `index`: `screen_campaign`, `policy_ingest`
+  - `llm`: `review_candidate`
+- Worker lắng nghe nhiều queue qua env `WORKER_QUEUES=parse,index,llm,default`.
+
 ### 1) Reliability (Ollama)
 - Thêm env vars:
   - `OLLAMA_TIMEOUT_S` (default 60)
@@ -29,4 +36,3 @@
 
 ### 4) Tests
 - Thêm `tests/test_policy_rag_e2e.py` (skip nếu Ollama không sẵn sàng).
-

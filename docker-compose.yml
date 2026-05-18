@@ -64,6 +64,8 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - WORKER_QUEUES=parse,index,llm,default
+      - LOG_LEVEL=INFO
       - OCR_LANG=vie+eng
       - OCR_DPI=300
       - OCR_PSM=6
