@@ -20,6 +20,9 @@ class Settings:
     ollama_embed_model: str
     ollama_base_url: str
     ollama_chat_model: str
+    ollama_timeout_s: float
+    ollama_retries: int
+    ollama_retry_backoff_s: float
 
     cv_chunk_size: int
     cv_chunk_overlap: int
@@ -41,6 +44,9 @@ def get_settings(project_root: Path | None = None) -> Settings:
         ollama_embed_model="nomic-embed-text",
         ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
         ollama_chat_model=os.environ.get("OLLAMA_CHAT_MODEL", "llama3"),
+        ollama_timeout_s=float(os.environ.get("OLLAMA_TIMEOUT_S", "60")),
+        ollama_retries=int(os.environ.get("OLLAMA_RETRIES", "2")),
+        ollama_retry_backoff_s=float(os.environ.get("OLLAMA_RETRY_BACKOFF_S", "1.0")),
         cv_chunk_size=int(os.environ.get("CV_CHUNK_SIZE", "1000")),
         cv_chunk_overlap=int(os.environ.get("CV_CHUNK_OVERLAP", "150")),
     )
@@ -72,6 +78,9 @@ def settings_for_campaign(campaign_id: int, project_root: Path | None = None) ->
         ollama_embed_model=base.ollama_embed_model,
         ollama_base_url=base.ollama_base_url,
         ollama_chat_model=base.ollama_chat_model,
+        ollama_timeout_s=base.ollama_timeout_s,
+        ollama_retries=base.ollama_retries,
+        ollama_retry_backoff_s=base.ollama_retry_backoff_s,
         cv_chunk_size=base.cv_chunk_size,
         cv_chunk_overlap=base.cv_chunk_overlap,
     )

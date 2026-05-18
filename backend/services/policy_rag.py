@@ -9,6 +9,7 @@ from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from backend.core.config import Settings, ensure_dirs, get_settings
+from backend.services.ollama_utils import invoke_with_retry
 from backend.services.utils import normalize_text
 
 
@@ -34,6 +35,7 @@ class PolicyRAG:
         self.embeddings = OllamaEmbeddings(
             model=self.settings.ollama_embed_model,
             base_url=self.settings.ollama_base_url,
+            client_kwargs={"timeout": self.settings.ollama_timeout_s},
         )
         policy_dir = self.settings.chroma_dir / "policy"
         policy_dir.mkdir(parents=True, exist_ok=True)
@@ -48,6 +50,7 @@ class PolicyRAG:
             model=self.settings.ollama_chat_model,
             base_url=self.settings.ollama_base_url,
             temperature=0,
+            client_kwargs={"timeout": self.settings.ollama_timeout_s},
         )
 
     def ingest_text(self, *, doc_id: str, source: str, text: str) -> int:
@@ -77,6 +80,8 @@ class PolicyRAG:
 
     def answer(self, *, query: str, k: int = 5) -> PolicyAnswer:
         citations = self.retrieve(query=query, k=k)
+        if not citations:
+            return PolicyAnswer(answer="Không tìm thấy trong tài liệu", citations=[])
         context = "\n\n---\n\n".join(
             f"SOURCE: {c.source} | CHUNK: {c.chunk_id}\n{c.snippet}" for c in citations
         )
@@ -88,7 +93,11 @@ class PolicyRAG:
             f"QUESTION:\n{query.strip()}\n\n"
             "Trả lời ngắn gọn, rõ ràng."
         )
-        resp = self.llm.invoke(prompt)
+        resp = invoke_with_retry(
+            self.llm,
+            prompt,
+            retries=self.settings.ollama_retries,
+            backoff_s=self.settings.ollama_retry_backoff_s,
+        )
         text = (getattr(resp, "content", "") or "").strip()
         return PolicyAnswer(answer=text, citations=citations)
-

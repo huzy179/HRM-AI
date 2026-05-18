@@ -32,6 +32,9 @@ services:
       - "8000:8000"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_TIMEOUT_S=60
+      - OLLAMA_RETRIES=2
+      - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
       - OCR_LANG=vie+eng
@@ -56,6 +59,9 @@ services:
       dockerfile: Dockerfile
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_TIMEOUT_S=60
+      - OLLAMA_RETRIES=2
+      - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
       - OCR_LANG=vie+eng
@@ -83,6 +89,9 @@ services:
     environment:
       - API_BASE_URL=http://api:8000
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_TIMEOUT_S=60
+      - OLLAMA_RETRIES=2
+      - OLLAMA_RETRY_BACKOFF_S=1.0
       - OCR_LANG=vie+eng
       - OCR_DPI=300
       - OCR_PSM=6

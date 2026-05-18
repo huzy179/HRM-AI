@@ -7,6 +7,7 @@ from langchain_ollama import ChatOllama
 
 from backend.core.config import Settings, get_settings
 from backend.core.schemas import CVLLMReview
+from backend.services.ollama_utils import invoke_with_retry
 
 
 def _build_prompt(*, jd_text: str, evidence_chunks: List[str]) -> str:
@@ -34,10 +35,16 @@ def review_with_llama3(*, cv_id: str, jd_text: str, evidence_chunks: List[str], 
         base_url=s.ollama_base_url,
         temperature=0,
         format="json",
+        client_kwargs={"timeout": s.ollama_timeout_s},
     )
 
     prompt = _build_prompt(jd_text=jd_text, evidence_chunks=evidence_chunks)
-    response = llm.invoke(prompt)
+    response = invoke_with_retry(
+        llm,
+        prompt,
+        retries=s.ollama_retries,
+        backoff_s=s.ollama_retry_backoff_s,
+    )
     content = (getattr(response, "content", "") or "").strip()
 
     try:

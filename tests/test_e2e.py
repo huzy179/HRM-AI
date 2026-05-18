@@ -39,6 +39,9 @@ def test_e2e_rank_and_review(tmp_path: Path, base_url: str) -> None:
         ollama_embed_model="nomic-embed-text",
         ollama_base_url=base_url,
         ollama_chat_model="llama3",
+        ollama_timeout_s=60,
+        ollama_retries=2,
+        ollama_retry_backoff_s=1.0,
         cv_chunk_size=400,
         cv_chunk_overlap=50,
     )

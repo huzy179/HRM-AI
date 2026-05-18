@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 from pathlib import Path
+import time
 
 from backend.db.session import SessionLocal
 from backend.db import models
@@ -10,6 +12,8 @@ from backend.services.matcher import CVMatcher
 from backend.core.config import settings_for_campaign
 from backend.services.llm_scorer import review_with_llama3
 from backend.services.policy_rag import PolicyRAG
+
+logger = logging.getLogger(__name__)
 
 
 def _update_job(job_id: str, *, status: str | None = None, progress: int | None = None, error: str | None = None) -> None:
@@ -31,7 +35,9 @@ def _update_job(job_id: str, *, status: str | None = None, progress: int | None 
 
 
 def run_job(job_type: str, payload: dict, job_id: str) -> None:
+    start = time.time()
     _update_job(job_id, status="RUNNING", progress=0, error=None)
+    logger.info("job.start job_id=%s type=%s payload_keys=%s", job_id, job_type, sorted(payload.keys()))
     try:
         if job_type == "parse_jd":
             _parse_jd(payload["campaign_id"], job_id)
@@ -43,14 +49,14 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
             _review_candidate(payload["campaign_id"], payload["candidate_id"], job_id)
         elif job_type == "policy_ingest":
             _policy_ingest(payload.get("doc_ids") or [], job_id)
-        elif job_type == "policy_chat":
-            _policy_chat(payload["query"], job_id)
         else:
             raise ValueError(f"Unknown job type: {job_type}")
 
         _update_job(job_id, status="DONE", progress=100)
+        logger.info("job.done job_id=%s type=%s duration_s=%.2f", job_id, job_type, time.time() - start)
     except Exception as exc:  # noqa: BLE001
         _update_job(job_id, status="FAILED", error=f"{exc.__class__.__name__}: {exc}")
+        logger.exception("job.failed job_id=%s type=%s duration_s=%.2f", job_id, job_type, time.time() - start)
         raise
 
 
@@ -210,8 +216,3 @@ def _policy_ingest(doc_ids: list[int], job_id: str) -> None:
             _update_job(job_id, progress=int((idx + 1) / total * 100))
     finally:
         session.close()
-
-
-def _policy_chat(query: str, job_id: str) -> None:
-    # Placeholder: Phase 2 policy chat implemented in dedicated module in next step
-    _update_job(job_id, progress=100)
