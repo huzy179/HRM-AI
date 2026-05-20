@@ -173,7 +173,7 @@ def get_ranking(campaign_id: int, session: SessionDep) -> dict:
     rows = (
         session.query(models.ScreeningResult)
         .filter(models.ScreeningResult.campaign_id == campaign_id)
-        .order_by(models.ScreeningResult.score_embed.desc())
+        .order_by(models.ScreeningResult.score_total.desc(), models.ScreeningResult.score_embed.desc())
         .all()
     )
     import json
@@ -182,9 +182,12 @@ def get_ranking(campaign_id: int, session: SessionDep) -> dict:
         "results": [
             {
                 "candidate_id": r.candidate_id,
-                "score": r.score_embed,
+                "score_total": float(getattr(r, "score_total", 0.0) or 0.0),
+                "score_embed": float(r.score_embed),
+                "score_rules": float(getattr(r, "score_rules", 0.0) or 0.0),
                 "notes": r.notes,
                 "evidence": json.loads(getattr(r, "evidence_json", "[]") or "[]"),
+                "rules": json.loads(getattr(r, "rules_json", "{}") or "{}"),
             }
             for r in rows
         ],

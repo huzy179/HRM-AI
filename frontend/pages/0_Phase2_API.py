@@ -55,7 +55,12 @@ def main() -> None:
     job_id = st.text_input("Job ID")
     if st.button("Get job") and job_id.strip():
         r = requests.get(_api(f"/jobs/{job_id.strip()}"), timeout=30)
-        st.json(r.json())
+        data = r.json()
+        st.json(data)
+        if isinstance(data, dict) and data.get("duration_ms") is not None:
+            st.caption(
+                f"duration_ms: {data.get('duration_ms')} | started_at: {data.get('started_at')} | finished_at: {data.get('finished_at')}"
+            )
 
     st.subheader("7) Ranking")
     if st.button("Get ranking"):
@@ -65,4 +70,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

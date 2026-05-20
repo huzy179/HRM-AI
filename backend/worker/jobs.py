@@ -14,6 +14,7 @@ from backend.services.llm_scorer import review_with_llama3
 from backend.services.policy_rag import PolicyRAG
 from backend.services.text_quality import assess_text_quality
 from backend.services.profile_extractor import extract_candidate_profile
+from backend.services.composite_scorer import combine_scores, score_candidate_rules
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ def _update_job(job_id: str, *, status: str | None = None, progress: int | None 
 def run_job(job_type: str, payload: dict, job_id: str) -> None:
     start = time.time()
     _update_job(job_id, status="RUNNING", progress=0, error=None)
+    _mark_job_started(job_id)
     logger.info("job.start job_id=%s type=%s payload_keys=%s", job_id, job_type, sorted(payload.keys()))
     try:
         if job_type == "parse_jd":
@@ -56,12 +58,50 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
         else:
             raise ValueError(f"Unknown job type: {job_type}")
 
+        # persist metrics
+        _mark_job_finished(job_id, started_ts=start)
         _update_job(job_id, status="DONE", progress=100)
         logger.info("job.done job_id=%s type=%s duration_s=%.2f", job_id, job_type, time.time() - start)
     except Exception as exc:  # noqa: BLE001
+        _mark_job_finished(job_id, started_ts=start, failed=True)
         _update_job(job_id, status="FAILED", error=f"{exc.__class__.__name__}: {exc}")
         logger.exception("job.failed job_id=%s type=%s duration_s=%.2f", job_id, job_type, time.time() - start)
         raise
+
+
+def _mark_job_finished(job_id: str, *, started_ts: float, failed: bool = False) -> None:
+    session = SessionLocal()
+    try:
+        job = session.get(models.Job, job_id)
+        if job is None:
+            return
+        now = datetime.utcnow()
+        if job.started_at is None:
+            job.started_at = now
+        job.finished_at = now
+        duration_ms = int(max(0.0, (time.time() - started_ts)) * 1000)
+        job.duration_ms = duration_ms
+        if failed and not (job.error or "").strip():
+            job.error = "FAILED"
+        job.updated_at = now
+        session.commit()
+    finally:
+        session.close()
+
+
+def _mark_job_started(job_id: str) -> None:
+    session = SessionLocal()
+    try:
+        job = session.get(models.Job, job_id)
+        if job is None:
+            return
+        now = datetime.utcnow()
+        if job.started_at is None:
+            job.started_at = now
+        job.updated_at = now
+        session.commit()
+    finally:
+        session.close()
 
 
 def _parse_jd(campaign_id: int, job_id: str) -> None:
@@ -160,13 +200,23 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
         for r in ranked:
             cand_id = int(r.cv_id)
             evidence = matcher.evidence_chunks(jd_text=jd.text or "", cv_id=str(cand_id), k=80, top_n=3)
+            profile = (
+                session.query(models.CandidateProfile)
+                .filter(models.CandidateProfile.candidate_id == cand_id)
+                .one_or_none()
+            )
+            rule = score_candidate_rules(jd_text=jd.text or "", profile=profile)
+            total = combine_scores(embed_score=float(r.score), rules_score=float(rule.score), w_embed=0.7)
             session.add(
                 models.ScreeningResult(
                     campaign_id=campaign_id,
                     candidate_id=cand_id,
                     score_embed=float(r.score),
+                    score_rules=float(rule.score),
+                    score_total=float(total),
                     notes=r.notes,
                     evidence_json=models.json_dumps(evidence),
+                    rules_json=models.json_dumps(rule.details),
                 )
             )
         session.commit()

@@ -80,8 +80,11 @@ class ScreeningResult(Base):
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False)
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), nullable=False)
     score_embed: Mapped[float] = mapped_column(Float, nullable=False)
+    score_rules: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    score_total: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     notes: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     evidence_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    rules_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -120,6 +123,9 @@ class Job(Base):
     status: Mapped[str] = mapped_column(String(50), default="QUEUED", nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
