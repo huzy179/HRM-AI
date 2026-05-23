@@ -82,3 +82,17 @@ def test_audit_endpoint_returns_events(tmp_path: Path, monkeypatch) -> None:
     # Sanity fields
     assert "path" in events[0]
     assert "subject" in events[0]
+    assert "request_id" in events[0]
+
+
+def test_audit_purge_requires_confirm(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    os.environ["HRM_API_KEY"] = "k_test_123"
+    os.environ["RATE_LIMIT_PER_MIN"] = "1000"
+    os.environ["RATE_LIMIT_AUTH_BONUS"] = "0"
+
+    client = _boot_app(tmp_path)
+    headers = {"X-API-Key": "k_test_123"}
+
+    r = client.post("/audit/purge", headers=headers)
+    assert r.status_code == 400

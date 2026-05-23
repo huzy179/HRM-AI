@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from backend.db.session import SessionDep
 from backend.db import models
+from backend.core.tenant import current_tenant_id
 
 
 router = APIRouter()
@@ -23,8 +24,9 @@ class JobOut(BaseModel):
 
 @router.get("/{job_id}", response_model=JobOut)
 def get_job(job_id: str, session: SessionDep) -> JobOut:
+    tenant_id = current_tenant_id()
     job = session.get(models.Job, job_id)
-    if job is None:
+    if job is None or getattr(job, "tenant_id", "default") != tenant_id:
         raise HTTPException(status_code=404, detail="Job not found")
     return JobOut(
         id=job.id,

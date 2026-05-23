@@ -54,6 +54,10 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
             _review_candidate(payload["campaign_id"], payload["candidate_id"], job_id)
         elif job_type == "policy_ingest":
             _policy_ingest(payload.get("doc_ids") or [], job_id)
+        elif job_type == "policy_rebuild":
+            _policy_rebuild(job_id)
+        elif job_type == "policy_clear":
+            _policy_clear(job_id)
         elif job_type == "extract_profile":
             _extract_profile(payload["campaign_id"], payload["candidate_id"], job_id)
         else:
@@ -108,7 +112,12 @@ def _mark_job_started(job_id: str) -> None:
 def _parse_jd(campaign_id: int, job_id: str) -> None:
     session = SessionLocal()
     try:
-        jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one()
+        tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
+        jd = (
+            session.query(models.JobDescription)
+            .filter(models.JobDescription.campaign_id == campaign_id, models.JobDescription.tenant_id == tenant_id)
+            .one()
+        )
         if jd.parse_status == "OK" and (jd.text or "").strip() and not (jd.error or "").strip():
             logger.info("parse_jd.skip campaign_id=%s reason=already_ok", campaign_id)
             _update_job(job_id, progress=100)
@@ -133,9 +142,10 @@ def _parse_jd(campaign_id: int, job_id: str) -> None:
 def _parse_cvs(campaign_id: int, job_id: str) -> None:
     session = SessionLocal()
     try:
+        tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
         candidates = (
             session.query(models.Candidate)
-            .filter(models.Candidate.campaign_id == campaign_id)
+            .filter(models.Candidate.campaign_id == campaign_id, models.Candidate.tenant_id == tenant_id)
             .order_by(models.Candidate.id.asc())
             .all()
         )
@@ -174,13 +184,18 @@ def _parse_cvs(campaign_id: int, job_id: str) -> None:
 def _screen_campaign(campaign_id: int, job_id: str) -> None:
     session = SessionLocal()
     try:
-        jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one_or_none()
+        tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
+        jd = (
+            session.query(models.JobDescription)
+            .filter(models.JobDescription.campaign_id == campaign_id, models.JobDescription.tenant_id == tenant_id)
+            .one_or_none()
+        )
         if jd is None or not (jd.text or "").strip():
             raise RuntimeError("JD_NOT_READY")
 
         candidates = (
             session.query(models.Candidate)
-            .filter(models.Candidate.campaign_id == campaign_id)
+            .filter(models.Candidate.campaign_id == campaign_id, models.Candidate.tenant_id == tenant_id)
             .order_by(models.Candidate.id.asc())
             .all()
         )
@@ -191,7 +206,7 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
 
         camp_settings = (
             session.query(models.CampaignSettings)
-            .filter(models.CampaignSettings.campaign_id == campaign_id)
+            .filter(models.CampaignSettings.campaign_id == campaign_id, models.CampaignSettings.tenant_id == tenant_id)
             .one_or_none()
         )
         w_embed = float(getattr(camp_settings, "w_embed", 0.7) or 0.7)
@@ -230,7 +245,11 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
         if chroma_ready:
             existing = (
                 session.query(models.ScreeningResult)
-                .filter(models.ScreeningResult.campaign_id == campaign_id, models.ScreeningResult.run_hash == run_hash)
+                .filter(
+                    models.ScreeningResult.campaign_id == campaign_id,
+                    models.ScreeningResult.tenant_id == tenant_id,
+                    models.ScreeningResult.run_hash == run_hash,
+                )
                 .count()
             )
             if existing >= len(ok_candidates) and len(ok_candidates) > 0:
@@ -244,7 +263,10 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
 
         ranked = matcher.rank(jd_text=jd.text or "", k=50)
 
-        session.query(models.ScreeningResult).filter(models.ScreeningResult.campaign_id == campaign_id).delete()
+        session.query(models.ScreeningResult).filter(
+            models.ScreeningResult.campaign_id == campaign_id,
+            models.ScreeningResult.tenant_id == tenant_id,
+        ).delete()
         session.commit()
 
         for r in ranked:
@@ -266,6 +288,7 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
                 models.ScreeningResult(
                     campaign_id=campaign_id,
                     candidate_id=cand_id,
+                    tenant_id=tenant_id,
                     score_embed=float(r.score),
                     score_rules=float(rule.score),
                     score_total=float(total),
@@ -284,18 +307,27 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
 def _review_candidate(campaign_id: int, candidate_id: int, job_id: str) -> None:
     session = SessionLocal()
     try:
-        jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one_or_none()
+        tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
+        jd = (
+            session.query(models.JobDescription)
+            .filter(models.JobDescription.campaign_id == campaign_id, models.JobDescription.tenant_id == tenant_id)
+            .one_or_none()
+        )
         cand = session.get(models.Candidate, candidate_id)
         if jd is None or not (jd.text or "").strip():
             raise RuntimeError("JD_NOT_READY")
-        if cand is None or cand.campaign_id != campaign_id:
+        if cand is None or cand.tenant_id != tenant_id or cand.campaign_id != campaign_id:
             raise RuntimeError("CANDIDATE_NOT_FOUND")
         if cand.parse_status != "OK" or not (cand.text or "").strip():
             raise RuntimeError("CANDIDATE_TEXT_NOT_READY")
 
         existing = (
             session.query(models.ReviewResult)
-            .filter(models.ReviewResult.campaign_id == campaign_id, models.ReviewResult.candidate_id == candidate_id)
+            .filter(
+                models.ReviewResult.campaign_id == campaign_id,
+                models.ReviewResult.candidate_id == candidate_id,
+                models.ReviewResult.tenant_id == tenant_id,
+            )
             .one_or_none()
         )
         if existing is not None and (existing.summary or "").strip():
@@ -309,7 +341,7 @@ def _review_candidate(campaign_id: int, candidate_id: int, job_id: str) -> None:
         review = review_with_llama3(cv_id=str(candidate_id), jd_text=jd.text or "", evidence_chunks=evidence, settings=settings)
 
         if existing is None:
-            existing = models.ReviewResult(campaign_id=campaign_id, candidate_id=candidate_id)
+            existing = models.ReviewResult(campaign_id=campaign_id, candidate_id=candidate_id, tenant_id=tenant_id)
             session.add(existing)
 
         existing.score_llm = int(review.score)
@@ -326,17 +358,18 @@ def _review_candidate(campaign_id: int, candidate_id: int, job_id: str) -> None:
 def _policy_ingest(doc_ids: list[int], job_id: str) -> None:
     session = SessionLocal()
     try:
+        tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
         if doc_ids:
             pending = (
                 session.query(models.PolicyDocument)
-                .filter(models.PolicyDocument.id.in_(doc_ids))
+                .filter(models.PolicyDocument.id.in_(doc_ids), models.PolicyDocument.tenant_id == tenant_id)
                 .order_by(models.PolicyDocument.id.asc())
                 .all()
             )
         else:
             pending = (
                 session.query(models.PolicyDocument)
-                .filter(models.PolicyDocument.ingest_status == "PENDING")
+                .filter(models.PolicyDocument.ingest_status == "PENDING", models.PolicyDocument.tenant_id == tenant_id)
                 .order_by(models.PolicyDocument.id.asc())
                 .all()
             )
@@ -370,11 +403,41 @@ def _policy_ingest(doc_ids: list[int], job_id: str) -> None:
         session.close()
 
 
+def _policy_clear(job_id: str) -> None:
+    rag = PolicyRAG()
+    rag.reset_collection()
+    _update_job(job_id, progress=100)
+
+
+def _policy_rebuild(job_id: str) -> None:
+    session = SessionLocal()
+    try:
+        tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
+        docs = (
+            session.query(models.PolicyDocument)
+            .filter(models.PolicyDocument.ingest_status == "OK", models.PolicyDocument.tenant_id == tenant_id)
+            .order_by(models.PolicyDocument.id.asc())
+            .all()
+        )
+        rag = PolicyRAG()
+        rag.reset_collection()
+        total = max(len(docs), 1)
+        for idx, doc in enumerate(docs):
+            if not (doc.text or "").strip():
+                continue
+            rag.ingest_text(doc_id=str(doc.id), source=doc.filename, text=doc.text or "")
+            _update_job(job_id, progress=int((idx + 1) / total * 100))
+    finally:
+        session.close()
+    _update_job(job_id, progress=100)
+
+
 def _extract_profile(campaign_id: int, candidate_id: int, job_id: str) -> None:
     session = SessionLocal()
     try:
+        tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
         cand = session.get(models.Candidate, candidate_id)
-        if cand is None or cand.campaign_id != campaign_id:
+        if cand is None or cand.tenant_id != tenant_id or cand.campaign_id != campaign_id:
             raise RuntimeError("CANDIDATE_NOT_FOUND")
         if cand.parse_status != "OK" or not (cand.text or "").strip():
             raise RuntimeError("CANDIDATE_TEXT_NOT_READY")
@@ -383,11 +446,11 @@ def _extract_profile(campaign_id: int, candidate_id: int, job_id: str) -> None:
 
         existing = (
             session.query(models.CandidateProfile)
-            .filter(models.CandidateProfile.candidate_id == candidate_id)
+            .filter(models.CandidateProfile.candidate_id == candidate_id, models.CandidateProfile.tenant_id == tenant_id)
             .one_or_none()
         )
         if existing is None:
-            existing = models.CandidateProfile(candidate_id=candidate_id)
+            existing = models.CandidateProfile(candidate_id=candidate_id, tenant_id=tenant_id)
             session.add(existing)
 
         existing.name = extracted.name

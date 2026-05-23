@@ -128,35 +128,51 @@ Ghi chú:
 - `RATE_LIMIT_AUTH_BONUS` (default `180`)
 - Frontend: `API_KEY` để tự gửi header `X-API-Key`
 
+### 4.7 Phase 7: Tenant + retention
+- `TENANT_ID` (default `default`): namespace cho policy index (Chroma dir/collection)
+- `AUDIT_RETENTION_DAYS` (default `30`): dùng bởi `POST /audit/purge`
+Ghi chú:
+- `TENANT_ID` cũng dùng để scope dữ liệu DB; API/worker filter theo tenant.
+
 ---
 
 ## 5) Data model (DB tables) — high level
 
 - `campaigns`
+  - `tenant_id`
 - `campaign_settings`
+  - `tenant_id`
   - `w_embed` (0..1): trọng số embeddings trong `score_total`
   - `required_skills_json` (override skills, optional)
   - `min_years_override` (override years, optional)
 - `job_descriptions`
+  - `tenant_id`
   - `text`, `parse_status`, `parse_method`, `error`
 - `candidates`
+  - `tenant_id`
   - `text`, `parse_status`, `parse_method`, `error`
   - metrics: `parse_chars`, `quality_score`, `quality_reason`
 - `candidate_profiles`
+  - `tenant_id`
   - `name`, `email`, `phone`, `years_experience`, `education`, `skills_json`
 - `screening_results`
+  - `tenant_id`
   - `score_embed`, `score_rules`, `score_total`
   - `evidence_json` (top chunks)
   - `rules_json` (explain: required/matched/missing/min_years/years_have, …)
 - `review_results`
+  - `tenant_id`
   - `score_llm`, `summary`, `strengths_json`, `gaps_json`, `evidence_json`
 - `policy_documents`
+  - `tenant_id`
   - `text`, `ingest_status`, `ingest_method`, `error`
 - `jobs`
+  - `tenant_id`
   - `status`, `progress`, `error`
   - metrics: `started_at`, `finished_at`, `duration_ms`
 - `audit_events` (Phase 6)
-  - `ts, subject, ip, method, path, status_code, duration_ms`
+  - `tenant_id`
+  - `ts, subject, ip, method, path, status_code, duration_ms, request_id`
 
 ---
 
@@ -200,13 +216,23 @@ Ghi chú:
 
 ### 6.9 Policy RAG
 - `POST /policy/ingest` (upload → enqueue `policy_ingest`)
+- `GET /policy/documents` (list policy docs + ingest status)
 - `POST /policy/chat` (retrieve + answer + citations)
+- `POST /policy/clear?confirm=true` (enqueue `policy_clear`)
+- `POST /policy/rebuild?confirm=true` (enqueue `policy_rebuild`)
 
 > Lưu ý Phase 6: khi bật API key, mọi endpoint **trừ** `/health` cần header `X-API-Key`.
 
 ### 6.10 Audit (Phase 6)
 - `GET /audit/events`
   - query params: `limit`, `minutes`, `path_prefix`, `subject_prefix`
+- `POST /audit/purge?confirm=true`
+  - query params: `days` (optional, default `AUDIT_RETENTION_DAYS`)
+
+### 6.11 Metrics
+- `GET /metrics/summary`
+  - query params: `minutes` (default 60), `max_rows` (default 5000)
+  - trả thống kê jobs theo job_type (count/avg/p95/failed)
 
 ---
 
@@ -231,6 +257,9 @@ Ghi chú:
      - nếu OCR: set `quality_score/quality_reason`
    - Nếu OCR quality fail → set `parse_status=ERROR`, `error=OCR_LOW_QUALITY:<reason>`, xoá `text` để tránh rank/review
 
+Ghi chú lưu file:
+- Tên file trên disk được sanitize và gắn prefix UUID (`<8hex>__<safe_name>`) để tránh path traversal và trùng tên.
+
 ### 7.3 CandidateProfile extraction (rule-based)
 1) `POST /campaigns/{id}/candidates/{candidate_id}/profile` → enqueue `extract_profile` (queue `index`)  
 2) Worker `extract_profile`:
@@ -248,6 +277,7 @@ Ghi chú:
    - Validate JD (`JD_NOT_READY` nếu chưa OK)
    - Lọc candidates `parse_status == OK`
    - Index CV chunks vào Chroma theo campaign (`settings_for_campaign(campaign_id)`)
+     - Chroma path được namespace theo tenant: `.../chroma_db/tenant_<TENANT_ID>/campaign_<id>/...`
    - Embedding rank → `score_embed`
    - Rule score từ `candidate_profiles` (skills + years) + override từ `campaign_settings` → `score_rules`
    - Combine:
@@ -309,3 +339,4 @@ Ghi chú:
   - ranking dashboard + filter + drill-down (Evidence/Rules/Review/Profile)
   - tự gửi `X-API-Key` nếu set env `API_KEY`
 - `frontend/pages/9_Policy_Chat_API.py`: ingest policy + chat (tự gửi `X-API-Key` nếu set)
+- `frontend/pages/8_Admin_API.py`: admin (audit/events, purge, metrics/summary, policy documents, policy clear/rebuild)

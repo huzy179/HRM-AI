@@ -34,6 +34,7 @@ def test_policy_rag_ingest_and_answer(tmp_path: Path, base_url: str) -> None:
         chroma_dir=chroma_dir,
         chroma_cv_screening_dir=chroma_dir / "cv_screening",
         chroma_collection_cvs="cvs_policy_e2e",
+        tenant_id="default",
         ollama_embed_model="nomic-embed-text",
         ollama_base_url=base_url,
         ollama_chat_model="llama3",
@@ -55,4 +56,3 @@ def test_policy_rag_ingest_and_answer(tmp_path: Path, base_url: str) -> None:
     assert isinstance(ans.answer, str) and ans.answer.strip()
     assert isinstance(ans.citations, list)
     assert ans.citations  # should retrieve from ingested chunks
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 from datetime import datetime
 from typing import Callable
 
@@ -10,10 +11,14 @@ from fastapi.responses import JSONResponse
 from backend.api.rate_limit import enforce_rate_limit
 from backend.api.security import AuthContext, get_auth_context, is_public_path
 from backend.db import models
+from backend.core.tenant import current_tenant_id
 
 
 async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Callable) -> Response:
     start = time.time()
+    request_id = (request.headers.get("x-request-id") or "").strip() or str(uuid.uuid4())
+    request.state.request_id = request_id
+    request.state.tenant_id = current_tenant_id()
 
     ctx = AuthContext(subject="anonymous")
     status_code = 500
@@ -23,13 +28,16 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
             enforce_rate_limit(request, subject=ctx.subject)
     except HTTPException as exc:
         status_code = int(exc.status_code)
-        return JSONResponse(status_code=status_code, content={"detail": exc.detail})
+        resp = JSONResponse(status_code=status_code, content={"detail": exc.detail})
+        resp.headers["X-Request-Id"] = request_id
+        return resp
 
     request.state.auth = ctx
 
     try:
         resp: Response = await call_next(request)
         status_code = resp.status_code
+        resp.headers["X-Request-Id"] = request_id
         return resp
     finally:
         # Best-effort audit log (don't break requests if DB is down)
@@ -45,12 +53,14 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
                 session.add(
                     models.AuditEvent(
                         ts=datetime.utcnow(),
+                        tenant_id=current_tenant_id(),
                         subject=ctx.subject,
                         ip=ip,
                         method=request.method,
                         path=request.url.path,
                         status_code=int(status_code),
                         duration_ms=duration_ms,
+                        request_id=request_id,
                     )
                 )
                 session.commit()

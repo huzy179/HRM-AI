@@ -37,6 +37,10 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       # Phase 6 (opt-in): set HRM_API_KEYS to enable auth (comma-separated)
       # - HRM_API_KEYS=dev_key_123,dev_key_456
+      # Phase 7: tenant namespace for policy index
+      - TENANT_ID=default
+      # Audit retention (used by /audit/purge)
+      - AUDIT_RETENTION_DAYS=30
       - RATE_LIMIT_PER_MIN=120
       - RATE_LIMIT_AUTH_BONUS=180
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
@@ -98,6 +102,7 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - TENANT_ID=default
       - RATE_LIMIT_PER_MIN=120
       - RATE_LIMIT_AUTH_BONUS=180
       - WORKER_QUEUES=parse,default
@@ -129,6 +134,7 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - TENANT_ID=default
       - RATE_LIMIT_PER_MIN=120
       - RATE_LIMIT_AUTH_BONUS=180
       - WORKER_QUEUES=index,default
@@ -160,6 +166,7 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - TENANT_ID=default
       - RATE_LIMIT_PER_MIN=120
       - RATE_LIMIT_AUTH_BONUS=180
       - WORKER_QUEUES=llm,default
@@ -190,6 +197,7 @@ services:
       - API_BASE_URL=http://api:8000
       # Optional: provide X-API-Key to call secured API when HRM_API_KEYS is set in api service
       # - API_KEY=dev_key_123
+      - TENANT_ID=default
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_TIMEOUT_S=60
       - OLLAMA_RETRIES=2

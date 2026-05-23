@@ -16,6 +16,7 @@ class Settings:
     chroma_dir: Path
     chroma_cv_screening_dir: Path
     chroma_collection_cvs: str
+    tenant_id: str
 
     ollama_embed_model: str
     ollama_base_url: str
@@ -41,6 +42,7 @@ def get_settings(project_root: Path | None = None) -> Settings:
         chroma_dir=chroma_dir,
         chroma_cv_screening_dir=chroma_dir / "cv_screening",
         chroma_collection_cvs="cvs",
+        tenant_id=os.environ.get("TENANT_ID", "default"),
         ollama_embed_model="nomic-embed-text",
         ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
         ollama_chat_model=os.environ.get("OLLAMA_CHAT_MODEL", "llama3"),
@@ -66,7 +68,8 @@ def settings_for_campaign(campaign_id: int, project_root: Path | None = None) ->
     This avoids cross-campaign contamination and allows parallel campaigns.
     """
     base = get_settings(project_root)
-    chroma_dir = base.chroma_dir / f"campaign_{campaign_id}"
+    tenant = (base.tenant_id or "default").strip() or "default"
+    chroma_dir = base.chroma_dir / f"tenant_{tenant}" / f"campaign_{campaign_id}"
     return Settings(
         project_root=base.project_root,
         raw_cv_dir=base.raw_cv_dir,
@@ -75,6 +78,7 @@ def settings_for_campaign(campaign_id: int, project_root: Path | None = None) ->
         chroma_dir=chroma_dir,
         chroma_cv_screening_dir=chroma_dir / "cv_screening",
         chroma_collection_cvs=f"cvs_campaign_{campaign_id}",
+        tenant_id=base.tenant_id,
         ollama_embed_model=base.ollama_embed_model,
         ollama_base_url=base.ollama_base_url,
         ollama_chat_model=base.ollama_chat_model,

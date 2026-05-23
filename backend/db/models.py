@@ -15,6 +15,7 @@ class Campaign(Base):
     __tablename__ = "campaigns"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -28,6 +29,7 @@ class CampaignSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False, unique=True)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
 
     # Composite scoring config
     w_embed: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
@@ -46,6 +48,7 @@ class JobDescription(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False, unique=True)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -62,6 +65,7 @@ class Candidate(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -81,6 +85,7 @@ class CandidateProfile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), nullable=False, unique=True)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
 
     name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
     email: Mapped[str] = mapped_column(String(200), default="", nullable=False)
@@ -98,6 +103,7 @@ class ScreeningResult(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False)
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
     score_embed: Mapped[float] = mapped_column(Float, nullable=False)
     score_rules: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     score_total: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
@@ -114,6 +120,7 @@ class ReviewResult(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False)
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
     score_llm: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
     strengths_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
@@ -126,6 +133,7 @@ class PolicyDocument(Base):
     __tablename__ = "policy_documents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -139,6 +147,7 @@ class Job(Base):
     __tablename__ = "jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
     job_type: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="QUEUED", nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -155,12 +164,14 @@ class AuditEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
     subject: Mapped[str] = mapped_column(String(100), nullable=False)
     ip: Mapped[str] = mapped_column(String(64), nullable=False)
     method: Mapped[str] = mapped_column(String(10), nullable=False)
     path: Mapped[str] = mapped_column(String(300), nullable=False)
     status_code: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    request_id: Mapped[str] = mapped_column(String(36), default="", nullable=False)
 
 
 def json_dumps(obj) -> str:

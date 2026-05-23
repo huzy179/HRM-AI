@@ -37,10 +37,11 @@ class PolicyRAG:
             base_url=self.settings.ollama_base_url,
             client_kwargs={"timeout": self.settings.ollama_timeout_s},
         )
-        policy_dir = self.settings.chroma_dir / "policy"
+        tenant = (getattr(self.settings, "tenant_id", None) or "default").strip() or "default"
+        policy_dir = self.settings.chroma_dir / f"policy_{tenant}"
         policy_dir.mkdir(parents=True, exist_ok=True)
         self.store = Chroma(
-            collection_name="policy_docs",
+            collection_name=f"policy_docs_{tenant}",
             embedding_function=self.embeddings,
             persist_directory=str(policy_dir),
         )
@@ -51,6 +52,24 @@ class PolicyRAG:
             base_url=self.settings.ollama_base_url,
             temperature=0,
             client_kwargs={"timeout": self.settings.ollama_timeout_s},
+        )
+
+    def reset_collection(self) -> None:
+        """
+        Clear policy collection for current tenant.
+        """
+        try:
+            self.store.delete_collection()
+        except Exception:
+            pass
+
+        tenant = (getattr(self.settings, "tenant_id", None) or "default").strip() or "default"
+        policy_dir = self.settings.chroma_dir / f"policy_{tenant}"
+        policy_dir.mkdir(parents=True, exist_ok=True)
+        self.store = Chroma(
+            collection_name=f"policy_docs_{tenant}",
+            embedding_function=self.embeddings,
+            persist_directory=str(policy_dir),
         )
 
     def ingest_text(self, *, doc_id: str, source: str, text: str) -> int:

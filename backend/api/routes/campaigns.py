@@ -12,6 +12,8 @@ from backend.db import models
 from backend.worker.queue import enqueue_job
 from backend.api.upload_limits import ensure_file_count, save_upload_limited
 from backend.services.jd_requirements import extract_jd_requirements
+from backend.api.file_storage import unique_dest
+from backend.core.tenant import current_tenant_id
 
 
 router = APIRouter()
@@ -77,7 +79,7 @@ class JDRequirementsOut(BaseModel):
 
 @router.post("", response_model=CampaignOut)
 def create_campaign(payload: CampaignCreate, session: SessionDep) -> CampaignOut:
-    campaign = models.Campaign(name=payload.name)
+    campaign = models.Campaign(tenant_id=current_tenant_id(), name=payload.name)
     session.add(campaign)
     session.commit()
     session.refresh(campaign)
@@ -86,31 +88,34 @@ def create_campaign(payload: CampaignCreate, session: SessionDep) -> CampaignOut
 
 @router.get("", response_model=List[CampaignOut])
 def list_campaigns(session: SessionDep) -> List[CampaignOut]:
-    rows = session.query(models.Campaign).order_by(models.Campaign.id.desc()).all()
+    tenant_id = current_tenant_id()
+    rows = session.query(models.Campaign).filter(models.Campaign.tenant_id == tenant_id).order_by(models.Campaign.id.desc()).all()
     return [CampaignOut(id=r.id, name=r.name) for r in rows]
 
 
 @router.get("/{campaign_id}", response_model=CampaignOut)
 def get_campaign(campaign_id: int, session: SessionDep) -> CampaignOut:
+    tenant_id = current_tenant_id()
     campaign = session.get(models.Campaign, campaign_id)
-    if campaign is None:
+    if campaign is None or campaign.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return CampaignOut(id=campaign.id, name=campaign.name)
 
 
 @router.get("/{campaign_id}/settings", response_model=CampaignSettingsOut)
 def get_campaign_settings(campaign_id: int, session: SessionDep) -> CampaignSettingsOut:
+    tenant_id = current_tenant_id()
     campaign = session.get(models.Campaign, campaign_id)
-    if campaign is None:
+    if campaign is None or campaign.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     row = (
         session.query(models.CampaignSettings)
-        .filter(models.CampaignSettings.campaign_id == campaign_id)
+        .filter(models.CampaignSettings.campaign_id == campaign_id, models.CampaignSettings.tenant_id == tenant_id)
         .one_or_none()
     )
     if row is None:
-        row = models.CampaignSettings(campaign_id=campaign_id)
+        row = models.CampaignSettings(campaign_id=campaign_id, tenant_id=tenant_id)
         session.add(row)
         session.commit()
         session.refresh(row)
@@ -131,17 +136,18 @@ def get_campaign_settings(campaign_id: int, session: SessionDep) -> CampaignSett
 
 @router.put("/{campaign_id}/settings", response_model=CampaignSettingsOut)
 def upsert_campaign_settings(campaign_id: int, payload: CampaignSettingsIn, session: SessionDep) -> CampaignSettingsOut:
+    tenant_id = current_tenant_id()
     campaign = session.get(models.Campaign, campaign_id)
-    if campaign is None:
+    if campaign is None or campaign.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     row = (
         session.query(models.CampaignSettings)
-        .filter(models.CampaignSettings.campaign_id == campaign_id)
+        .filter(models.CampaignSettings.campaign_id == campaign_id, models.CampaignSettings.tenant_id == tenant_id)
         .one_or_none()
     )
     if row is None:
-        row = models.CampaignSettings(campaign_id=campaign_id)
+        row = models.CampaignSettings(campaign_id=campaign_id, tenant_id=tenant_id)
         session.add(row)
 
     # sanitize
@@ -165,15 +171,16 @@ def upsert_campaign_settings(campaign_id: int, payload: CampaignSettingsIn, sess
 
 @router.get("/{campaign_id}/requirements", response_model=JDRequirementsOut)
 def get_jd_requirements(campaign_id: int, session: SessionDep) -> JDRequirementsOut:
+    tenant_id = current_tenant_id()
     jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one_or_none()
-    if jd is None or not (jd.text or "").strip():
+    if jd is None or jd.tenant_id != tenant_id or not (jd.text or "").strip():
         raise HTTPException(status_code=409, detail="JD not ready")
 
     req = extract_jd_requirements(jd.text or "")
 
     settings = (
         session.query(models.CampaignSettings)
-        .filter(models.CampaignSettings.campaign_id == campaign_id)
+        .filter(models.CampaignSettings.campaign_id == campaign_id, models.CampaignSettings.tenant_id == tenant_id)
         .one_or_none()
     )
     import json
@@ -199,18 +206,19 @@ def get_jd_requirements(campaign_id: int, session: SessionDep) -> JDRequirements
 
 @router.post("/{campaign_id}/jd")
 async def upload_jd(campaign_id: int, session: SessionDep, file: UploadFile = File(...)) -> dict:
+    tenant_id = current_tenant_id()
     campaign = session.get(models.Campaign, campaign_id)
-    if campaign is None:
+    if campaign is None or campaign.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     uploads_dir = Path("uploads") / f"campaign_{campaign_id}" / "jd"
     uploads_dir.mkdir(parents=True, exist_ok=True)
-    dest = uploads_dir / file.filename
+    dest = unique_dest(uploads_dir, file.filename)
     await save_upload_limited(file, dest)
 
     jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one_or_none()
     if jd is None:
-        jd = models.JobDescription(campaign_id=campaign_id, filename=file.filename, file_path=str(dest))
+        jd = models.JobDescription(campaign_id=campaign_id, tenant_id=tenant_id, filename=file.filename, file_path=str(dest))
         session.add(jd)
     else:
         jd.filename = file.filename
@@ -218,6 +226,7 @@ async def upload_jd(campaign_id: int, session: SessionDep, file: UploadFile = Fi
         jd.text = None
         jd.parse_status = "PENDING"
         jd.error = None
+        jd.tenant_id = tenant_id
     session.commit()
 
     job_id = enqueue_job("parse_jd", {"campaign_id": campaign_id})
@@ -226,8 +235,9 @@ async def upload_jd(campaign_id: int, session: SessionDep, file: UploadFile = Fi
 
 @router.post("/{campaign_id}/cvs")
 async def upload_cvs(campaign_id: int, session: SessionDep, files: List[UploadFile] = File(...)) -> dict:
+    tenant_id = current_tenant_id()
     campaign = session.get(models.Campaign, campaign_id)
-    if campaign is None:
+    if campaign is None or campaign.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     ensure_file_count(len(files))
@@ -236,10 +246,11 @@ async def upload_cvs(campaign_id: int, session: SessionDep, files: List[UploadFi
 
     created: List[int] = []
     for up in files:
-        dest = uploads_dir / up.filename
+        dest = unique_dest(uploads_dir, up.filename)
         await save_upload_limited(up, dest)
         cand = models.Candidate(
             campaign_id=campaign_id,
+            tenant_id=tenant_id,
             filename=up.filename,
             file_path=str(dest),
             parse_status="PENDING",
@@ -256,9 +267,10 @@ async def upload_cvs(campaign_id: int, session: SessionDep, files: List[UploadFi
 
 @router.get("/{campaign_id}/candidates", response_model=List[CandidateOut])
 def list_candidates(campaign_id: int, session: SessionDep) -> List[CandidateOut]:
+    tenant_id = current_tenant_id()
     rows = (
         session.query(models.Candidate)
-        .filter(models.Candidate.campaign_id == campaign_id)
+        .filter(models.Candidate.campaign_id == campaign_id, models.Candidate.tenant_id == tenant_id)
         .order_by(models.Candidate.id.desc())
         .all()
     )
@@ -279,8 +291,9 @@ def list_candidates(campaign_id: int, session: SessionDep) -> List[CandidateOut]
 
 @router.post("/{campaign_id}/screen")
 def start_screening(campaign_id: int, session: SessionDep) -> dict:
+    tenant_id = current_tenant_id()
     campaign = session.get(models.Campaign, campaign_id)
-    if campaign is None:
+    if campaign is None or campaign.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     job_id = enqueue_job("screen_campaign", {"campaign_id": campaign_id})
@@ -289,9 +302,10 @@ def start_screening(campaign_id: int, session: SessionDep) -> dict:
 
 @router.get("/{campaign_id}/ranking")
 def get_ranking(campaign_id: int, session: SessionDep) -> dict:
+    tenant_id = current_tenant_id()
     rows = (
         session.query(models.ScreeningResult)
-        .filter(models.ScreeningResult.campaign_id == campaign_id)
+        .filter(models.ScreeningResult.campaign_id == campaign_id, models.ScreeningResult.tenant_id == tenant_id)
         .order_by(models.ScreeningResult.score_total.desc(), models.ScreeningResult.score_embed.desc())
         .all()
     )
@@ -315,9 +329,10 @@ def get_ranking(campaign_id: int, session: SessionDep) -> dict:
 
 @router.post("/{campaign_id}/candidates/{candidate_id}/review")
 def start_review(campaign_id: int, candidate_id: int, session: SessionDep) -> dict:
+    tenant_id = current_tenant_id()
     campaign = session.get(models.Campaign, campaign_id)
     cand = session.get(models.Candidate, candidate_id)
-    if campaign is None or cand is None or cand.campaign_id != campaign_id:
+    if campaign is None or cand is None or campaign.tenant_id != tenant_id or cand.tenant_id != tenant_id or cand.campaign_id != campaign_id:
         raise HTTPException(status_code=404, detail="Campaign/Candidate not found")
 
     job_id = enqueue_job("review_candidate", {"campaign_id": campaign_id, "candidate_id": candidate_id})
@@ -326,9 +341,10 @@ def start_review(campaign_id: int, candidate_id: int, session: SessionDep) -> di
 
 @router.post("/{campaign_id}/candidates/{candidate_id}/profile")
 def start_profile_extract(campaign_id: int, candidate_id: int, session: SessionDep) -> dict:
+    tenant_id = current_tenant_id()
     campaign = session.get(models.Campaign, campaign_id)
     cand = session.get(models.Candidate, candidate_id)
-    if campaign is None or cand is None or cand.campaign_id != campaign_id:
+    if campaign is None or cand is None or campaign.tenant_id != tenant_id or cand.tenant_id != tenant_id or cand.campaign_id != campaign_id:
         raise HTTPException(status_code=404, detail="Campaign/Candidate not found")
     job_id = enqueue_job("extract_profile", {"campaign_id": campaign_id, "candidate_id": candidate_id})
     return {"ok": True, "job_id": job_id}
@@ -336,13 +352,14 @@ def start_profile_extract(campaign_id: int, candidate_id: int, session: SessionD
 
 @router.get("/{campaign_id}/candidates/{candidate_id}/profile", response_model=CandidateProfileOut)
 def get_profile(campaign_id: int, candidate_id: int, session: SessionDep) -> CandidateProfileOut:
+    tenant_id = current_tenant_id()
     cand = session.get(models.Candidate, candidate_id)
-    if cand is None or cand.campaign_id != campaign_id:
+    if cand is None or cand.tenant_id != tenant_id or cand.campaign_id != campaign_id:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     row = (
         session.query(models.CandidateProfile)
-        .filter(models.CandidateProfile.candidate_id == candidate_id)
+        .filter(models.CandidateProfile.candidate_id == candidate_id, models.CandidateProfile.tenant_id == tenant_id)
         .one_or_none()
     )
     if row is None:
@@ -363,9 +380,14 @@ def get_profile(campaign_id: int, candidate_id: int, session: SessionDep) -> Can
 
 @router.get("/{campaign_id}/candidates/{candidate_id}/review", response_model=ReviewOut)
 def get_review(campaign_id: int, candidate_id: int, session: SessionDep) -> ReviewOut:
+    tenant_id = current_tenant_id()
     row = (
         session.query(models.ReviewResult)
-        .filter(models.ReviewResult.campaign_id == campaign_id, models.ReviewResult.candidate_id == candidate_id)
+        .filter(
+            models.ReviewResult.campaign_id == campaign_id,
+            models.ReviewResult.candidate_id == candidate_id,
+            models.ReviewResult.tenant_id == tenant_id,
+        )
         .one_or_none()
     )
     if row is None:

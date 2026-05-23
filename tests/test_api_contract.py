@@ -63,6 +63,7 @@ def test_campaign_crud_and_uploads(tmp_path: Path, monkeypatch) -> None:
     )
     assert r.status_code == 200
     assert r.json()["job_id"] == "job_test_1"
+    assert r.headers.get("X-Request-Id")
 
     r = client.post(
         f"/campaigns/{camp_id}/cvs",
@@ -98,3 +99,7 @@ def test_policy_ingest_contract(tmp_path: Path, monkeypatch) -> None:
     assert body["ok"] is True
     assert body["job_id"] == "job_test_2"
     assert body["doc_ids"]
+
+    # hygiene endpoints require confirm=true
+    r = client.post("/policy/clear")
+    assert r.status_code == 400

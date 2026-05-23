@@ -34,6 +34,7 @@ def test_rank_returns_scores(tmp_path: Path, base_url: str) -> None:
         chroma_dir=data_dir / "chroma_db",
         chroma_cv_screening_dir=chroma_dir,
         chroma_collection_cvs="cvs_test",
+        tenant_id="default",
         ollama_embed_model="nomic-embed-text",
         ollama_base_url=base_url,
         ollama_chat_model="llama3",
