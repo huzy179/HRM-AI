@@ -8,6 +8,8 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from frontend import api_client
+
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
@@ -20,7 +22,7 @@ def _poll_job(job_id: str, *, timeout_s: int = 180) -> Dict[str, Any]:
     deadline = time.time() + timeout_s
     last: Dict[str, Any] = {}
     while time.time() < deadline:
-        r = requests.get(_api(f"/jobs/{job_id}"), timeout=15)
+        r = api_client.get(f"/jobs/{job_id}", timeout=15)
         last = r.json()
         if last.get("status") in {"DONE", "FAILED"}:
             return last
@@ -51,9 +53,9 @@ def main() -> None:
     with col_a:
         st.subheader("1) Campaign")
         if st.button("Refresh campaigns"):
-            st.session_state["campaigns"] = requests.get(_api("/campaigns"), timeout=30).json()
+            st.session_state["campaigns"] = api_client.get("/campaigns", timeout=30).json()
 
-        campaigns = st.session_state.get("campaigns") or requests.get(_api("/campaigns"), timeout=30).json()
+        campaigns = st.session_state.get("campaigns") or api_client.get("/campaigns", timeout=30).json()
         options = [None, *campaigns]
         selected = st.selectbox(
             "Chọn campaign",
@@ -64,7 +66,7 @@ def main() -> None:
         if selected is None:
             new_name = st.text_input("Campaign name", value="Campaign 1")
             if st.button("Create"):
-                created = requests.post(_api("/campaigns"), json={"name": new_name}, timeout=30).json()
+                created = api_client.post("/campaigns", json={"name": new_name}, timeout=30).json()
                 st.success(f"Created campaign {created['id']}")
                 st.session_state["campaign_id"] = created["id"]
         else:
@@ -84,7 +86,7 @@ def main() -> None:
         )
         if st.button("Upload JD") and jd is not None:
             files = {"file": (jd.name, jd.getvalue(), "application/octet-stream")}
-            res = requests.post(_api(f"/campaigns/{campaign_id}/jd"), files=files, timeout=120).json()
+            res = api_client.post(f"/campaigns/{campaign_id}/jd", files=files, timeout=120).json()
             st.json(res)
             st.session_state["last_job_id"] = res.get("job_id")
 
@@ -96,7 +98,7 @@ def main() -> None:
     )
     if st.button("Upload CVs") and cvs:
         files = [("files", (f.name, f.getvalue(), "application/octet-stream")) for f in cvs]
-        res = requests.post(_api(f"/campaigns/{campaign_id}/cvs"), files=files, timeout=300).json()
+        res = api_client.post(f"/campaigns/{campaign_id}/cvs", files=files, timeout=300).json()
         st.json(res)
         st.session_state["last_job_id"] = res.get("job_id")
 
@@ -112,8 +114,8 @@ def main() -> None:
 
     st.subheader("5) Candidates")
     if st.button("Refresh candidates"):
-        st.session_state["candidates"] = requests.get(_api(f"/campaigns/{campaign_id}/candidates"), timeout=30).json()
-    candidates = st.session_state.get("candidates") or requests.get(_api(f"/campaigns/{campaign_id}/candidates"), timeout=30).json()
+        st.session_state["candidates"] = api_client.get(f"/campaigns/{campaign_id}/candidates", timeout=30).json()
+    candidates = st.session_state.get("candidates") or api_client.get(f"/campaigns/{campaign_id}/candidates", timeout=30).json()
 
     df_cand = pd.DataFrame(candidates) if candidates else pd.DataFrame(columns=["id", "filename", "parse_status", "error"])
     if not df_cand.empty:
@@ -137,15 +139,58 @@ def main() -> None:
         st.dataframe(df_cand, use_container_width=True, height=260)
 
     st.subheader("6) Screening")
+    st.subheader("6.0) Campaign settings (composite scoring)")
+    try:
+        settings_resp = api_client.get(f"/campaigns/{campaign_id}/settings", timeout=20)
+        _, camp_settings = _safe_get_json(settings_resp)
+    except Exception:
+        camp_settings = {}
+
+    w_embed_default = float((camp_settings or {}).get("w_embed", 0.7) or 0.7)
+    req_skills_default = (camp_settings or {}).get("required_skills") or []
+    min_years_default = float((camp_settings or {}).get("min_years_override", 0.0) or 0.0)
+
+    col_set1, col_set2, col_set3 = st.columns([1, 2, 1], gap="large")
+    with col_set1:
+        w_embed = st.slider("w_embed (0..1)", min_value=0.0, max_value=1.0, value=float(w_embed_default), step=0.05)
+    with col_set2:
+        skills_str = st.text_input(
+            "Override required skills (comma-separated, optional)",
+            value=", ".join([str(x) for x in req_skills_default]),
+        )
+    with col_set3:
+        min_years_override = st.number_input("Min years override", min_value=0.0, max_value=50.0, value=float(min_years_default), step=0.5)
+
+    col_btn1, col_btn2 = st.columns([1, 1], gap="large")
+    with col_btn1:
+        if st.button("Save settings"):
+            skills = [s.strip().lower() for s in (skills_str or "").split(",") if s.strip()]
+            payload = {"w_embed": w_embed, "required_skills": skills, "min_years_override": float(min_years_override)}
+            r = api_client.put(f"/campaigns/{campaign_id}/settings", json=payload, timeout=30)
+            ok, data = _safe_get_json(r)
+            if ok and r.status_code < 300:
+                st.success("Saved.")
+                st.json(data)
+            else:
+                st.error(data)
+    with col_btn2:
+        if st.button("Preview JD requirements"):
+            r = api_client.get(f"/campaigns/{campaign_id}/requirements", timeout=30)
+            ok, data = _safe_get_json(r)
+            if ok and r.status_code < 300:
+                st.json(data)
+            else:
+                st.error(data)
+
     col_s1, col_s2 = st.columns([1, 1], gap="large")
     with col_s1:
         if st.button("Start screening"):
-            res = requests.post(_api(f"/campaigns/{campaign_id}/screen"), timeout=60).json()
+            res = api_client.post(f"/campaigns/{campaign_id}/screen", timeout=60).json()
             st.json(res)
             st.session_state["last_job_id"] = res.get("job_id")
     with col_s2:
         if st.button("Get ranking"):
-            ranking = requests.get(_api(f"/campaigns/{campaign_id}/ranking"), timeout=60).json()
+            ranking = api_client.get(f"/campaigns/{campaign_id}/ranking", timeout=60).json()
             rows = ranking.get("results") or []
             st.session_state["ranking"] = rows
             st.session_state["ranking_df"] = pd.DataFrame(rows)
@@ -281,7 +326,7 @@ def main() -> None:
         col_r1, col_r2 = st.columns([1, 1], gap="large")
         with col_r1:
             if st.button("Start review", key="btn_start_review"):
-                res = requests.post(_api(f"/campaigns/{campaign_id}/candidates/{selected_id}/review"), timeout=60)
+                res = api_client.post(f"/campaigns/{campaign_id}/candidates/{selected_id}/review", timeout=60)
                 ok, payload = _safe_get_json(res)
                 if ok:
                     st.json(payload)
@@ -290,7 +335,7 @@ def main() -> None:
                     st.error(payload)
         with col_r2:
             if st.button("Get review", key="btn_get_review"):
-                r = requests.get(_api(f"/campaigns/{campaign_id}/candidates/{selected_id}/review"), timeout=60)
+                r = api_client.get(f"/campaigns/{campaign_id}/candidates/{selected_id}/review", timeout=60)
                 if r.status_code != 200:
                     st.error(r.text)
                 else:
@@ -300,8 +345,8 @@ def main() -> None:
         col_p1, col_p2 = st.columns([1, 1], gap="large")
         with col_p1:
             if st.button("Start profile extract", key="btn_start_profile"):
-                res = requests.post(
-                    _api(f"/campaigns/{campaign_id}/candidates/{selected_id}/profile"),
+                res = api_client.post(
+                    f"/campaigns/{campaign_id}/candidates/{selected_id}/profile",
                     timeout=60,
                 )
                 ok, payload = _safe_get_json(res)
@@ -312,8 +357,8 @@ def main() -> None:
                     st.error(payload)
         with col_p2:
             if st.button("Get profile", key="btn_get_profile"):
-                r = requests.get(
-                    _api(f"/campaigns/{campaign_id}/candidates/{selected_id}/profile"),
+                r = api_client.get(
+                    f"/campaigns/{campaign_id}/candidates/{selected_id}/profile",
                     timeout=30,
                 )
                 if r.status_code != 200:
@@ -324,4 +369,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

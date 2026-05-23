@@ -20,6 +20,25 @@ class Campaign(Base):
 
     candidates: Mapped[list["Candidate"]] = relationship(back_populates="campaign")
     jd: Mapped["JobDescription | None"] = relationship(back_populates="campaign", uselist=False)
+    settings: Mapped["CampaignSettings | None"] = relationship(back_populates="campaign", uselist=False)
+
+
+class CampaignSettings(Base):
+    __tablename__ = "campaign_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False, unique=True)
+
+    # Composite scoring config
+    w_embed: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
+
+    # Optional overrides for rule scoring
+    required_skills_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    min_years_override: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    campaign: Mapped[Campaign] = relationship(back_populates="settings")
 
 
 class JobDescription(Base):
@@ -128,6 +147,19 @@ class Job(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    subject: Mapped[str] = mapped_column(String(100), nullable=False)
+    ip: Mapped[str] = mapped_column(String(64), nullable=False)
+    method: Mapped[str] = mapped_column(String(10), nullable=False)
+    path: Mapped[str] = mapped_column(String(300), nullable=False)
+    status_code: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 def json_dumps(obj) -> str:

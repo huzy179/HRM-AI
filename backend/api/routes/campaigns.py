@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -10,6 +11,7 @@ from backend.db.session import SessionDep
 from backend.db import models
 from backend.worker.queue import enqueue_job
 from backend.api.upload_limits import ensure_file_count, read_limited
+from backend.services.jd_requirements import extract_jd_requirements
 
 
 router = APIRouter()
@@ -54,6 +56,25 @@ class CandidateProfileOut(BaseModel):
     skills: list[str]
 
 
+class CampaignSettingsIn(BaseModel):
+    w_embed: float = 0.7
+    required_skills: list[str] = []
+    min_years_override: float = 0.0
+
+
+class CampaignSettingsOut(BaseModel):
+    campaign_id: int
+    w_embed: float
+    required_skills: list[str]
+    min_years_override: float
+
+
+class JDRequirementsOut(BaseModel):
+    required_skills: list[str]
+    min_years: float
+    source: str  # "jd" | "override" | "mixed"
+
+
 @router.post("", response_model=CampaignOut)
 def create_campaign(payload: CampaignCreate, session: SessionDep) -> CampaignOut:
     campaign = models.Campaign(name=payload.name)
@@ -75,6 +96,105 @@ def get_campaign(campaign_id: int, session: SessionDep) -> CampaignOut:
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return CampaignOut(id=campaign.id, name=campaign.name)
+
+
+@router.get("/{campaign_id}/settings", response_model=CampaignSettingsOut)
+def get_campaign_settings(campaign_id: int, session: SessionDep) -> CampaignSettingsOut:
+    campaign = session.get(models.Campaign, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    row = (
+        session.query(models.CampaignSettings)
+        .filter(models.CampaignSettings.campaign_id == campaign_id)
+        .one_or_none()
+    )
+    if row is None:
+        row = models.CampaignSettings(campaign_id=campaign_id)
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+    import json
+
+    skills = json.loads(row.required_skills_json or "[]")
+    if not isinstance(skills, list):
+        skills = []
+
+    return CampaignSettingsOut(
+        campaign_id=campaign_id,
+        w_embed=float(row.w_embed),
+        required_skills=[str(x).strip().lower() for x in skills if str(x).strip()],
+        min_years_override=float(row.min_years_override or 0.0),
+    )
+
+
+@router.put("/{campaign_id}/settings", response_model=CampaignSettingsOut)
+def upsert_campaign_settings(campaign_id: int, payload: CampaignSettingsIn, session: SessionDep) -> CampaignSettingsOut:
+    campaign = session.get(models.Campaign, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    row = (
+        session.query(models.CampaignSettings)
+        .filter(models.CampaignSettings.campaign_id == campaign_id)
+        .one_or_none()
+    )
+    if row is None:
+        row = models.CampaignSettings(campaign_id=campaign_id)
+        session.add(row)
+
+    # sanitize
+    w_embed = float(payload.w_embed)
+    w_embed = max(0.0, min(1.0, w_embed))
+    skills = sorted({str(x).strip().lower() for x in (payload.required_skills or []) if str(x).strip()})
+
+    row.w_embed = w_embed
+    row.required_skills_json = models.json_dumps(skills)
+    row.min_years_override = float(payload.min_years_override or 0.0)
+    row.updated_at = datetime.utcnow()
+    session.commit()
+
+    return CampaignSettingsOut(
+        campaign_id=campaign_id,
+        w_embed=float(row.w_embed),
+        required_skills=skills,
+        min_years_override=float(row.min_years_override or 0.0),
+    )
+
+
+@router.get("/{campaign_id}/requirements", response_model=JDRequirementsOut)
+def get_jd_requirements(campaign_id: int, session: SessionDep) -> JDRequirementsOut:
+    jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one_or_none()
+    if jd is None or not (jd.text or "").strip():
+        raise HTTPException(status_code=409, detail="JD not ready")
+
+    req = extract_jd_requirements(jd.text or "")
+
+    settings = (
+        session.query(models.CampaignSettings)
+        .filter(models.CampaignSettings.campaign_id == campaign_id)
+        .one_or_none()
+    )
+    import json
+
+    override_skills: list[str] = []
+    min_years_override = 0.0
+    if settings is not None:
+        obj = json.loads(settings.required_skills_json or "[]")
+        if isinstance(obj, list):
+            override_skills = [str(x).strip().lower() for x in obj if str(x).strip()]
+        min_years_override = float(settings.min_years_override or 0.0)
+
+    # If override provided, prefer it
+    required_skills = override_skills or req.required_skills
+    min_years = min_years_override if min_years_override > 0 else req.min_years
+
+    source = "jd"
+    if override_skills or min_years_override > 0:
+        source = "override" if (override_skills and min_years_override > 0) else "mixed"
+
+    return JDRequirementsOut(required_skills=required_skills, min_years=float(min_years), source=source)
 
 
 @router.post("/{campaign_id}/jd")

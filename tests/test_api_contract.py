@@ -46,6 +46,17 @@ def test_campaign_crud_and_uploads(tmp_path: Path, monkeypatch) -> None:
     assert r.status_code == 200
     assert any(x["id"] == camp_id for x in r.json())
 
+    r = client.get(f"/campaigns/{camp_id}/settings")
+    assert r.status_code == 200
+    assert r.json()["campaign_id"] == camp_id
+
+    r = client.put(
+        f"/campaigns/{camp_id}/settings",
+        json={"w_embed": 0.6, "required_skills": ["python", "docker"], "min_years_override": 2},
+    )
+    assert r.status_code == 200
+    assert r.json()["w_embed"] == 0.6
+
     r = client.post(
         f"/campaigns/{camp_id}/jd",
         files={"file": ("jd.txt", b"Hiring Python engineer", "text/plain")},

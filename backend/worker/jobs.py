@@ -189,6 +189,25 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
         matcher = CVMatcher(settings)
         matcher.reset_collection()
 
+        camp_settings = (
+            session.query(models.CampaignSettings)
+            .filter(models.CampaignSettings.campaign_id == campaign_id)
+            .one_or_none()
+        )
+        w_embed = float(getattr(camp_settings, "w_embed", 0.7) or 0.7)
+        import json
+
+        required_skills_override: list[str] | None = None
+        min_years_override: float | None = None
+        if camp_settings is not None:
+            try:
+                obj = json.loads(getattr(camp_settings, "required_skills_json", "[]") or "[]")
+                if isinstance(obj, list) and obj:
+                    required_skills_override = [str(x).strip().lower() for x in obj if str(x).strip()]
+            except Exception:
+                required_skills_override = None
+            min_years_override = float(getattr(camp_settings, "min_years_override", 0.0) or 0.0) or None
+
         for cand in ok_candidates:
             matcher.index_cv(cv_id=str(cand.id), cv_text=cand.text or "", metadata={"candidate_id": cand.id, "campaign_id": campaign_id})
 
@@ -205,8 +224,13 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
                 .filter(models.CandidateProfile.candidate_id == cand_id)
                 .one_or_none()
             )
-            rule = score_candidate_rules(jd_text=jd.text or "", profile=profile)
-            total = combine_scores(embed_score=float(r.score), rules_score=float(rule.score), w_embed=0.7)
+            rule = score_candidate_rules(
+                jd_text=jd.text or "",
+                profile=profile,
+                required_skills_override=required_skills_override,
+                min_years_override=min_years_override,
+            )
+            total = combine_scores(embed_score=float(r.score), rules_score=float(rule.score), w_embed=w_embed)
             session.add(
                 models.ScreeningResult(
                     campaign_id=campaign_id,

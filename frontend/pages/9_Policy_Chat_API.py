@@ -6,6 +6,8 @@ from typing import List
 import requests
 import streamlit as st
 
+from frontend import api_client
+
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
@@ -23,14 +25,14 @@ def main() -> None:
     files = st.file_uploader("Upload policy PDFs/TXTs", type=["pdf", "txt"], accept_multiple_files=True)
     if st.button("Ingest") and files:
         payload_files = [("files", (f.name, f.getvalue(), "application/octet-stream")) for f in files]
-        r = requests.post(_api("/policy/ingest"), files=payload_files, timeout=300)
+        r = api_client.post("/policy/ingest", files=payload_files, timeout=300)
         st.json(r.json())
 
     st.subheader("2) Ask a question")
     query = st.text_input("Question", value="Quy định nghỉ phép như thế nào?")
     k = st.slider("Top K citations", min_value=3, max_value=10, value=5)
     if st.button("Ask"):
-        r = requests.post(_api("/policy/chat"), json={"query": query, "k": k}, timeout=300)
+        r = api_client.post("/policy/chat", json={"query": query, "k": k}, timeout=300)
         data = r.json()
         st.write("**Answer**")
         st.write(data.get("answer", ""))
@@ -40,4 +42,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

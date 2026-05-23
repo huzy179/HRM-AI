@@ -35,6 +35,10 @@ services:
       - OLLAMA_TIMEOUT_S=60
       - OLLAMA_RETRIES=2
       - OLLAMA_RETRY_BACKOFF_S=1.0
+      # Phase 6 (opt-in): set HRM_API_KEYS to enable auth (comma-separated)
+      # - HRM_API_KEYS=dev_key_123,dev_key_456
+      - RATE_LIMIT_PER_MIN=120
+      - RATE_LIMIT_AUTH_BONUS=180
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
       - OCR_LANG=vie+eng
@@ -94,6 +98,8 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - RATE_LIMIT_PER_MIN=120
+      - RATE_LIMIT_AUTH_BONUS=180
       - WORKER_QUEUES=parse,default
       - LOG_LEVEL=INFO
       - OCR_LANG=vie+eng
@@ -123,6 +129,8 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - RATE_LIMIT_PER_MIN=120
+      - RATE_LIMIT_AUTH_BONUS=180
       - WORKER_QUEUES=index,default
       - LOG_LEVEL=INFO
       - OCR_LANG=vie+eng
@@ -152,6 +160,8 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
       - REDIS_URL=redis://redis:6379/0
+      - RATE_LIMIT_PER_MIN=120
+      - RATE_LIMIT_AUTH_BONUS=180
       - WORKER_QUEUES=llm,default
       - LOG_LEVEL=INFO
       - OCR_LANG=vie+eng
@@ -178,6 +188,8 @@ services:
       - "8501:8501"
     environment:
       - API_BASE_URL=http://api:8000
+      # Optional: provide X-API-Key to call secured API when HRM_API_KEYS is set in api service
+      # - API_KEY=dev_key_123
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_TIMEOUT_S=60
       - OLLAMA_RETRIES=2
