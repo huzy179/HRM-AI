@@ -10,7 +10,7 @@ from backend.db.session import SessionDep
 from backend.db import models
 from backend.worker.queue import enqueue_job
 from backend.services.policy_rag import PolicyRAG
-from backend.api.upload_limits import ensure_file_count, read_limited
+from backend.api.upload_limits import ensure_file_count, save_upload_limited
 
 
 router = APIRouter()
@@ -35,7 +35,7 @@ async def ingest_policy(session: SessionDep, files: List[UploadFile] = File(...)
     doc_ids: list[int] = []
     for f in files:
         dest = uploads_dir / f.filename
-        dest.write_bytes(await read_limited(f))
+        await save_upload_limited(f, dest)
         doc = models.PolicyDocument(filename=f.filename, file_path=str(dest), ingest_status="PENDING")
         session.add(doc)
         session.flush()

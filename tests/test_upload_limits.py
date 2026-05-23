@@ -72,4 +72,3 @@ def test_upload_rejects_too_many_files(tmp_path: Path, monkeypatch) -> None:
         ],
     )
     assert r.status_code == 413
-

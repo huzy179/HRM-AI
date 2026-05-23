@@ -104,6 +104,7 @@ class ScreeningResult(Base):
     notes: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     evidence_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     rules_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    run_hash: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

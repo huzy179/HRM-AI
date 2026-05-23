@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from backend.db.session import SessionDep
 from backend.db import models
 from backend.worker.queue import enqueue_job
-from backend.api.upload_limits import ensure_file_count, read_limited
+from backend.api.upload_limits import ensure_file_count, save_upload_limited
 from backend.services.jd_requirements import extract_jd_requirements
 
 
@@ -206,8 +206,7 @@ async def upload_jd(campaign_id: int, session: SessionDep, file: UploadFile = Fi
     uploads_dir = Path("uploads") / f"campaign_{campaign_id}" / "jd"
     uploads_dir.mkdir(parents=True, exist_ok=True)
     dest = uploads_dir / file.filename
-    content = await read_limited(file)
-    dest.write_bytes(content)
+    await save_upload_limited(file, dest)
 
     jd = session.query(models.JobDescription).filter(models.JobDescription.campaign_id == campaign_id).one_or_none()
     if jd is None:
@@ -238,7 +237,7 @@ async def upload_cvs(campaign_id: int, session: SessionDep, files: List[UploadFi
     created: List[int] = []
     for up in files:
         dest = uploads_dir / up.filename
-        dest.write_bytes(await read_limited(up))
+        await save_upload_limited(up, dest)
         cand = models.Candidate(
             campaign_id=campaign_id,
             filename=up.filename,

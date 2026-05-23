@@ -15,6 +15,7 @@ from backend.services.policy_rag import PolicyRAG
 from backend.services.text_quality import assess_text_quality
 from backend.services.profile_extractor import extract_candidate_profile
 from backend.services.composite_scorer import combine_scores, score_candidate_rules
+from backend.services.hashing import sha256_text, sha256_hex
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +188,6 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
 
         settings = settings_for_campaign(campaign_id)
         matcher = CVMatcher(settings)
-        matcher.reset_collection()
 
         camp_settings = (
             session.query(models.CampaignSettings)
@@ -208,6 +208,37 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
                 required_skills_override = None
             min_years_override = float(getattr(camp_settings, "min_years_override", 0.0) or 0.0) or None
 
+        # Compute deterministic run hash for idempotency
+        parts: list[bytes] = []
+        parts.append(b"campaign:" + str(campaign_id).encode("utf-8"))
+        parts.append(b"jd:" + sha256_text(jd.text or "").encode("utf-8"))
+        parts.append(b"w_embed:" + str(round(float(w_embed), 4)).encode("utf-8"))
+        parts.append(b"min_years:" + str(float(min_years_override or 0.0)).encode("utf-8"))
+        parts.append(b"skills:" + ",".join(sorted(required_skills_override or [])).encode("utf-8"))
+        for cand in ok_candidates:
+            parts.append(b"cand:" + str(cand.id).encode("utf-8") + b":" + sha256_text(cand.text or "").encode("utf-8"))
+        run_hash = sha256_hex(b"\n".join(parts))
+
+        # Skip if DB already has same run_hash and Chroma index directory exists
+        chroma_ready = False
+        try:
+            if settings.chroma_cv_screening_dir.exists():
+                chroma_ready = any(settings.chroma_cv_screening_dir.rglob("*"))
+        except Exception:
+            chroma_ready = False
+
+        if chroma_ready:
+            existing = (
+                session.query(models.ScreeningResult)
+                .filter(models.ScreeningResult.campaign_id == campaign_id, models.ScreeningResult.run_hash == run_hash)
+                .count()
+            )
+            if existing >= len(ok_candidates) and len(ok_candidates) > 0:
+                logger.info("screen_campaign.skip campaign_id=%s reason=same_run_hash candidates=%s", campaign_id, len(ok_candidates))
+                _update_job(job_id, progress=100)
+                return
+
+        matcher.reset_collection()
         for cand in ok_candidates:
             matcher.index_cv(cv_id=str(cand.id), cv_text=cand.text or "", metadata={"candidate_id": cand.id, "campaign_id": campaign_id})
 
@@ -241,6 +272,7 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
                     notes=r.notes,
                     evidence_json=models.json_dumps(evidence),
                     rules_json=models.json_dumps(rule.details),
+                    run_hash=run_hash,
                 )
             )
         session.commit()

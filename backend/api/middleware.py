@@ -4,11 +4,11 @@ import time
 from datetime import datetime
 from typing import Callable
 
-from fastapi import Request, Response
+from fastapi import HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
 from backend.api.rate_limit import enforce_rate_limit
 from backend.api.security import AuthContext, get_auth_context, is_public_path
-from backend.db.session import SessionLocal
 from backend.db import models
 
 
@@ -16,13 +16,17 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
     start = time.time()
 
     ctx = AuthContext(subject="anonymous")
-    if not is_public_path(request.url.path):
-        ctx = get_auth_context(request)
-        enforce_rate_limit(request, subject=ctx.subject)
+    status_code = 500
+    try:
+        if not is_public_path(request.url.path):
+            ctx = get_auth_context(request)
+            enforce_rate_limit(request, subject=ctx.subject)
+    except HTTPException as exc:
+        status_code = int(exc.status_code)
+        return JSONResponse(status_code=status_code, content={"detail": exc.detail})
 
     request.state.auth = ctx
 
-    status_code = 500
     try:
         resp: Response = await call_next(request)
         status_code = resp.status_code
@@ -34,6 +38,8 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
             ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (
                 request.client.host if request.client else "unknown"
             )
+            from backend.db.session import SessionLocal
+
             session = SessionLocal()
             try:
                 session.add(
@@ -52,4 +58,3 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
                 session.close()
         except Exception:
             pass
-

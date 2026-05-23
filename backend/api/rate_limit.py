@@ -18,8 +18,12 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-RATE_LIMIT_PER_MIN = _env_int("RATE_LIMIT_PER_MIN", 120)
-RATE_LIMIT_AUTH_BONUS = _env_int("RATE_LIMIT_AUTH_BONUS", 180)
+def _limits_for_subject(subject: str) -> int:
+    base = _env_int("RATE_LIMIT_PER_MIN", 120)
+    bonus = _env_int("RATE_LIMIT_AUTH_BONUS", 180)
+    if subject.startswith("api_key:"):
+        return base + max(0, bonus)
+    return base
 
 
 @dataclass
@@ -29,6 +33,10 @@ class _MemBucket:
 
 
 _MEM: dict[str, _MemBucket] = {}
+
+
+def reset_memory_state() -> None:
+    _MEM.clear()
 
 
 def _client_ip(request: Request) -> str:
@@ -57,9 +65,7 @@ def enforce_rate_limit(request: Request, *, subject: str) -> None:
     Fixed-window rate limiting (per minute).
     Uses Redis when available; otherwise falls back to in-memory process state.
     """
-    limit = RATE_LIMIT_PER_MIN
-    if subject.startswith("api_key:"):
-        limit += max(0, RATE_LIMIT_AUTH_BONUS)
+    limit = _limits_for_subject(subject)
 
     now_s = int(time.time())
     window = now_s // 60
@@ -90,4 +96,3 @@ def enforce_rate_limit(request: Request, *, subject: str) -> None:
     bucket.count += 1
     if bucket.count > limit:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
-
