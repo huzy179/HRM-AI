@@ -4,12 +4,13 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from backend.db.session import SessionDep
 from backend.db import models
 from backend.core.tenant import current_tenant_id
+from backend.api.security import require_admin
 
 
 router = APIRouter()
@@ -29,12 +30,14 @@ class AuditEventOut(BaseModel):
 
 @router.get("/events", response_model=List[AuditEventOut])
 def list_audit_events(
+    request: Request,
     session: SessionDep,
     limit: int = 200,
     minutes: int = 60,
     path_prefix: str | None = None,
     subject_prefix: str | None = None,
 ) -> List[AuditEventOut]:
+    require_admin(request)
     limit = max(1, min(500, int(limit)))
     minutes = max(1, min(24 * 60, int(minutes)))
 
@@ -65,7 +68,8 @@ def list_audit_events(
 
 
 @router.post("/purge")
-def purge_audit_events(session: SessionDep, confirm: bool = False, days: int | None = None) -> dict:
+def purge_audit_events(request: Request, session: SessionDep, confirm: bool = False, days: int | None = None) -> dict:
+    require_admin(request)
     if not confirm:
         raise HTTPException(status_code=400, detail="Set confirm=true to purge audit events")
 

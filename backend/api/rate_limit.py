@@ -70,7 +70,8 @@ def enforce_rate_limit(request: Request, *, subject: str) -> None:
     now_s = int(time.time())
     window = now_s // 60
     ip = _client_ip(request)
-    key = f"rl:{window}:{ip}:{subject}"
+    tenant = (os.environ.get("TENANT_ID") or "default").strip() or "default"
+    key = f"rl:{tenant}:{window}:{ip}:{subject}"
 
     r = _redis_client()
     if r is not None:

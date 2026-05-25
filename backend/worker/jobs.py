@@ -9,13 +9,14 @@ from backend.db.session import SessionLocal
 from backend.db import models
 from backend.services.cv_parser import parse_file
 from backend.services.matcher import CVMatcher
-from backend.core.config import settings_for_campaign
+from backend.core.config import get_settings, settings_for_campaign
 from backend.services.llm_scorer import review_with_llama3
 from backend.services.policy_rag import PolicyRAG
 from backend.services.text_quality import assess_text_quality
 from backend.services.profile_extractor import extract_candidate_profile
 from backend.services.composite_scorer import combine_scores, score_candidate_rules
 from backend.services.hashing import sha256_text, sha256_hex
+from backend.services.storage_cleanup import cleanup_storage
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,18 @@ def _update_job(job_id: str, *, status: str | None = None, progress: int | None 
     finally:
         session.close()
 
+
+def _set_job_result(job_id: str, result_json: str) -> None:
+    session = SessionLocal()
+    try:
+        job = session.get(models.Job, job_id)
+        if job is None:
+            return
+        job.result_json = result_json or ""
+        job.updated_at = datetime.utcnow()
+        session.commit()
+    finally:
+        session.close()
 
 def run_job(job_type: str, payload: dict, job_id: str) -> None:
     start = time.time()
@@ -60,6 +73,8 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
             _policy_clear(job_id)
         elif job_type == "extract_profile":
             _extract_profile(payload["campaign_id"], payload["candidate_id"], job_id)
+        elif job_type == "cleanup_storage":
+            _cleanup_storage(payload, job_id)
         else:
             raise ValueError(f"Unknown job type: {job_type}")
 
@@ -465,3 +480,54 @@ def _extract_profile(campaign_id: int, candidate_id: int, job_id: str) -> None:
     finally:
         session.close()
     _update_job(job_id, progress=100)
+
+
+def _cleanup_storage(payload: dict, job_id: str) -> None:
+    session = SessionLocal()
+    try:
+        job = session.get(models.Job, job_id)
+        tenant_id = getattr(job, "tenant_id", "default") if job else "default"
+        dry_run = bool(payload.get("dry_run", True))
+
+        referenced_files: set[str] = set()
+        referenced_campaign_ids: set[int] = set()
+
+        # campaigns in tenant
+        for c in session.query(models.Campaign).filter(models.Campaign.tenant_id == tenant_id).all():
+            referenced_campaign_ids.add(int(c.id))
+
+        # referenced file paths for tenant
+        for jd in session.query(models.JobDescription).filter(models.JobDescription.tenant_id == tenant_id).all():
+            if jd.file_path:
+                referenced_files.add(str(jd.file_path))
+        for cand in session.query(models.Candidate).filter(models.Candidate.tenant_id == tenant_id).all():
+            if cand.file_path:
+                referenced_files.add(str(cand.file_path))
+        for doc in session.query(models.PolicyDocument).filter(models.PolicyDocument.tenant_id == tenant_id).all():
+            if doc.file_path:
+                referenced_files.add(str(doc.file_path))
+
+        root = Path(get_settings().project_root)
+        uploads_root = root / "uploads"
+        chroma_root = root / "data" / "chroma_db"
+
+        def _abs_path(p: str) -> str:
+            pp = Path(p)
+            if pp.is_absolute():
+                return str(pp)
+            return str((root / pp).resolve())
+
+        referenced_files_abs = {_abs_path(p) for p in referenced_files}
+
+        report = cleanup_storage(
+            tenant_id=tenant_id,
+            uploads_root=uploads_root,
+            chroma_root=chroma_root,
+            referenced_files=referenced_files_abs,
+            referenced_campaign_ids=referenced_campaign_ids,
+            dry_run=dry_run,
+        )
+        _set_job_result(job_id, models.json_dumps(report.__dict__))
+        _update_job(job_id, progress=100)
+    finally:
+        session.close()

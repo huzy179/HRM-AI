@@ -37,6 +37,8 @@ services:
       - OLLAMA_RETRY_BACKOFF_S=1.0
       # Phase 6 (opt-in): set HRM_API_KEYS to enable auth (comma-separated)
       # - HRM_API_KEYS=dev_key_123,dev_key_456
+      # Optional admin keys for dangerous endpoints
+      # - HRM_ADMIN_API_KEYS=admin_key_123
       # Phase 7: tenant namespace for policy index
       - TENANT_ID=default
       # Audit retention (used by /audit/purge)

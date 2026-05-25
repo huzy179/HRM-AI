@@ -211,7 +211,7 @@ async def upload_jd(campaign_id: int, session: SessionDep, file: UploadFile = Fi
     if campaign is None or campaign.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    uploads_dir = Path("uploads") / f"campaign_{campaign_id}" / "jd"
+    uploads_dir = Path("uploads") / f"tenant_{tenant_id}" / f"campaign_{campaign_id}" / "jd"
     uploads_dir.mkdir(parents=True, exist_ok=True)
     dest = unique_dest(uploads_dir, file.filename)
     await save_upload_limited(file, dest)
@@ -241,7 +241,7 @@ async def upload_cvs(campaign_id: int, session: SessionDep, files: List[UploadFi
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     ensure_file_count(len(files))
-    uploads_dir = Path("uploads") / f"campaign_{campaign_id}" / "cvs"
+    uploads_dir = Path("uploads") / f"tenant_{tenant_id}" / f"campaign_{campaign_id}" / "cvs"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     created: List[int] = []

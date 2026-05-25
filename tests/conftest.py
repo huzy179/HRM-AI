@@ -21,6 +21,8 @@ def _reset_security_env() -> None:
     for k in [
         "HRM_API_KEY",
         "HRM_API_KEYS",
+        "HRM_ADMIN_API_KEY",
+        "HRM_ADMIN_API_KEYS",
         "RATE_LIMIT_PER_MIN",
         "RATE_LIMIT_AUTH_BONUS",
     ]:

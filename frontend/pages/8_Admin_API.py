@@ -42,7 +42,10 @@ def main() -> None:
     if st.button("Purge") and confirm:
         r = api_client.post(f"/audit/purge?confirm=true&days={int(days)}", timeout=60)
         if r.status_code != 200:
-            st.error(r.text)
+            if r.status_code == 403:
+                st.error("Admin required (set HRM_ADMIN_API_KEY(S) on API and use an admin API_KEY in frontend).")
+            else:
+                st.error(r.text)
         else:
             st.json(r.json())
 
@@ -58,6 +61,47 @@ def main() -> None:
             else:
                 st.json(r.json())
 
+    st.subheader("3.1) Jobs (recent) + retry (admin)")
+    if st.button("Load jobs"):
+        r = api_client.get("/jobs?limit=50", timeout=30)
+        if r.status_code != 200:
+            st.error(r.text)
+        else:
+            st.dataframe(r.json(), use_container_width=True, height=260)
+
+    retry_job_id = st.text_input("Retry job_id")
+    confirm_retry = st.checkbox("confirm retry", value=False)
+    force_retry = st.checkbox("force retry (override idempotency check)", value=False)
+    if st.button("Retry job") and confirm_retry and retry_job_id.strip():
+        qp = "confirm=true"
+        if force_retry:
+            qp += "&force=true"
+        r = api_client.post(f"/jobs/{retry_job_id.strip()}/retry?{qp}", timeout=60)
+        if r.status_code != 200:
+            if r.status_code == 403:
+                st.error("Admin required.")
+            else:
+                st.error(r.text)
+        else:
+            st.json(r.json())
+
+    st.subheader("3.2) Queue backlog & worker health (Redis)")
+    col_q1, col_q2 = st.columns([1, 1], gap="large")
+    with col_q1:
+        if st.button("Load queue backlog"):
+            r = api_client.get("/admin/queues", timeout=30)
+            if r.status_code != 200:
+                st.error(r.text)
+            else:
+                st.json(r.json())
+    with col_q2:
+        if st.button("Load workers"):
+            r = api_client.get("/admin/workers", timeout=30)
+            if r.status_code != 200:
+                st.error(r.text)
+            else:
+                st.dataframe((r.json() or {}).get("workers") or [], use_container_width=True, height=220)
+
     st.subheader("4) Policy documents & index hygiene")
     col_d1, col_d2, col_d3 = st.columns([1, 1, 1], gap="large")
     with col_d1:
@@ -71,18 +115,36 @@ def main() -> None:
         if st.button("Rebuild policy index"):
             r = api_client.post("/policy/rebuild?confirm=true", timeout=60)
             if r.status_code != 200:
-                st.error(r.text)
+                if r.status_code == 403:
+                    st.error("Admin required.")
+                else:
+                    st.error(r.text)
             else:
                 st.json(r.json())
     with col_d3:
         if st.button("Clear policy index"):
             r = api_client.post("/policy/clear?confirm=true", timeout=60)
             if r.status_code != 200:
-                st.error(r.text)
+                if r.status_code == 403:
+                    st.error("Admin required.")
+                else:
+                    st.error(r.text)
             else:
                 st.json(r.json())
+
+    st.subheader("5) Storage cleanup (tenant)")
+    dry_run = st.checkbox("dry_run", value=True)
+    confirm_cleanup = st.checkbox("confirm cleanup", value=False)
+    if st.button("Start cleanup job") and confirm_cleanup:
+        r = api_client.post(f"/admin/cleanup?confirm=true&dry_run={'true' if dry_run else 'false'}", timeout=60)
+        if r.status_code != 200:
+            if r.status_code == 403:
+                st.error("Admin required.")
+            else:
+                st.error(r.text)
+        else:
+            st.json(r.json())
 
 
 if __name__ == "__main__":
     main()
-

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from backend.api.routes import campaigns, jobs, health, policy, audit, metrics
+from backend.api.routes import campaigns, jobs, health, policy, audit, metrics, admin
 from backend.api.middleware import auth_rate_limit_and_audit_middleware
 
 
@@ -17,6 +17,7 @@ def create_app() -> FastAPI:
     app.include_router(policy.router, prefix="/policy", tags=["policy"])
     app.include_router(audit.router, prefix="/audit", tags=["audit"])
     app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+    app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
     return app
 

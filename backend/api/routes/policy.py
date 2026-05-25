@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from backend.db.session import SessionDep
@@ -13,6 +13,7 @@ from backend.services.policy_rag import PolicyRAG
 from backend.api.upload_limits import ensure_file_count, save_upload_limited
 from backend.api.file_storage import unique_dest
 from backend.core.tenant import current_tenant_id
+from backend.api.security import require_admin
 
 
 router = APIRouter()
@@ -38,7 +39,7 @@ class PolicyDocumentOut(BaseModel):
 @router.post("/ingest")
 async def ingest_policy(session: SessionDep, files: List[UploadFile] = File(...)) -> dict:
     tenant_id = current_tenant_id()
-    uploads_dir = Path("uploads") / "policy"
+    uploads_dir = Path("uploads") / f"tenant_{tenant_id}" / "policy"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     ensure_file_count(len(files))
@@ -90,7 +91,8 @@ def chat_policy(payload: PolicyChatIn) -> PolicyChatOut:
 
 
 @router.post("/clear")
-def clear_policy_index(confirm: bool = False) -> dict:
+def clear_policy_index(request: Request, confirm: bool = False) -> dict:
+    require_admin(request)
     if not confirm:
         raise HTTPException(status_code=400, detail="Set confirm=true to clear policy index")
     job_id = enqueue_job("policy_clear", {})
@@ -98,7 +100,8 @@ def clear_policy_index(confirm: bool = False) -> dict:
 
 
 @router.post("/rebuild")
-def rebuild_policy_index(confirm: bool = False) -> dict:
+def rebuild_policy_index(request: Request, confirm: bool = False) -> dict:
+    require_admin(request)
     if not confirm:
         raise HTTPException(status_code=400, detail="Set confirm=true to rebuild policy index")
     job_id = enqueue_job("policy_rebuild", {})

@@ -35,6 +35,10 @@ def _boot_app(tmp_path: Path) -> TestClient:
 def test_upload_rejects_large_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     os.environ["MAX_UPLOAD_BYTES"] = "10"
+    os.environ.pop("HRM_API_KEY", None)  # ensure auth disabled
+    os.environ.pop("HRM_API_KEYS", None)
+    os.environ.pop("HRM_ADMIN_API_KEY", None)
+    os.environ.pop("HRM_ADMIN_API_KEYS", None)
 
     import backend.api.upload_limits as limits
 
@@ -42,6 +46,7 @@ def test_upload_rejects_large_file(tmp_path: Path, monkeypatch) -> None:
 
     client = _boot_app(tmp_path)
     r = client.post("/campaigns", json={"name": "camp_a"})
+    assert r.status_code == 200
     camp_id = r.json()["id"]
 
     payload = b"x" * 20
@@ -55,6 +60,10 @@ def test_upload_rejects_large_file(tmp_path: Path, monkeypatch) -> None:
 def test_upload_rejects_too_many_files(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     os.environ["MAX_UPLOAD_FILES"] = "1"
+    os.environ.pop("HRM_API_KEY", None)
+    os.environ.pop("HRM_API_KEYS", None)
+    os.environ.pop("HRM_ADMIN_API_KEY", None)
+    os.environ.pop("HRM_ADMIN_API_KEYS", None)
 
     import backend.api.upload_limits as limits
 
@@ -62,6 +71,7 @@ def test_upload_rejects_too_many_files(tmp_path: Path, monkeypatch) -> None:
 
     client = _boot_app(tmp_path)
     r = client.post("/campaigns", json={"name": "camp_a"})
+    assert r.status_code == 200
     camp_id = r.json()["id"]
 
     r = client.post(

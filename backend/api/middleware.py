@@ -18,7 +18,8 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
     start = time.time()
     request_id = (request.headers.get("x-request-id") or "").strip() or str(uuid.uuid4())
     request.state.request_id = request_id
-    request.state.tenant_id = current_tenant_id()
+    tenant_id = current_tenant_id()
+    request.state.tenant_id = tenant_id
 
     ctx = AuthContext(subject="anonymous")
     status_code = 500
@@ -30,6 +31,7 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
         status_code = int(exc.status_code)
         resp = JSONResponse(status_code=status_code, content={"detail": exc.detail})
         resp.headers["X-Request-Id"] = request_id
+        resp.headers["X-Tenant-Id"] = tenant_id
         return resp
 
     request.state.auth = ctx
@@ -38,6 +40,7 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
         resp: Response = await call_next(request)
         status_code = resp.status_code
         resp.headers["X-Request-Id"] = request_id
+        resp.headers["X-Tenant-Id"] = tenant_id
         return resp
     finally:
         # Best-effort audit log (don't break requests if DB is down)
