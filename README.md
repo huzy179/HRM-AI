@@ -19,7 +19,7 @@ docker compose exec ollama ollama pull nomic-embed-text
 docker compose exec ollama ollama pull llama3
 ```
 
-- Streamlit UI: `http://localhost:8501`
+- Next.js UI: `http://localhost:3000`
 - API docs: `http://localhost:8000/docs`
 - API health: `http://localhost:8000/health`
 

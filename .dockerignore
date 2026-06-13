@@ -10,4 +10,7 @@ __pycache__
 
 # Local data (mounted via volume instead)
 data/chroma_db
+node_modules
+frontend/node_modules
+frontend/.next
 

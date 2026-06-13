@@ -197,33 +197,24 @@ services:
 
   frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "8501:8501"
+      - "3000:3000"
     environment:
-      - API_BASE_URL=http://api:8000
-      # Optional: provide X-API-Key to call secured API when HRM_API_KEYS is set in api service
-      # - API_KEY=dev_key_123
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
       - TENANT_ID=default
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_TIMEOUT_S=60
-      - OLLAMA_RETRIES=2
-      - OLLAMA_RETRY_BACKOFF_S=1.0
-      - OCR_LANG=vie+eng
-      - OCR_DPI=300
-      - OCR_PSM=6
-      - OCR_OEM=1
-      - OCR_CROP_RATIO=0.05
-      - ANONYMIZED_TELEMETRY=False
     volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
-      - ./frontend:/app/frontend
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/next.config.ts:/app/next.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/tailwind.config.ts:/app/tailwind.config.ts
     depends_on:
       - api
       - ollama
-    command: ["streamlit", "run", "frontend/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+    command: ["npm", "run", "dev"]
 
 volumes:
   ollama:

@@ -21,7 +21,7 @@ docker compose exec ollama ollama pull nomic-embed-text
 docker compose exec ollama ollama pull llama3
 ```
 
-- Streamlit UI: `http://localhost:8501`
+- Next.js UI: `http://localhost:3000`
 - API docs: `http://localhost:8000/docs`
 - API health: `http://localhost:8000/health`
 
@@ -31,6 +31,7 @@ docker compose exec ollama ollama pull llama3
 
 ### 1.1 Runtime & packaging
 - Python 3.10+
+- Node.js 20+ (Next.js Frontend)
 - Docker / Docker Compose (khuyến nghị để chạy đủ stack)
 - `.venv` (dev local)
 
@@ -56,8 +57,8 @@ docker compose exec ollama ollama pull llama3
 
 ### 1.5 AI / RAG
 - Ollama (local)
-  - Embeddings: `nomic-embed-text`
-  - Chat/review: `llama3` (hoặc model khác qua env)
+- Embeddings: `nomic-embed-text`
+- Chat/review: `llama3` (hoặc model khác qua env)
 - LangChain integrations:
   - `langchain-ollama`
   - `langchain-chroma`
@@ -70,8 +71,8 @@ docker compose exec ollama ollama pull llama3
 - OCR quality gate (heuristic) để chặn text OCR “rác”
 
 ### 1.7 Frontend
-- Streamlit (UI gọi API)
-- UI hỗ trợ API key (Phase 6) qua env `API_KEY`
+- Next.js (App Router, TypeScript, Tailwind CSS)
+- Cổng kết nối phát triển mặc định: `3000`
 
 ### 1.8 Testing
 - pytest
@@ -87,7 +88,7 @@ docker compose exec ollama ollama pull llama3
 - `postgres` (port `5432`): DB
 - `redis` (port `6379`): queue backend + (Phase 6) rate limit counters
 - `api` (port `8000`): FastAPI
-- `frontend` (port `8501`): Streamlit
+- `frontend` (port `3000`): Next.js
 
 ### 2.2 Workers (queue split)
 - `worker_parse`: nghe `parse,default`

@@ -6,8 +6,19 @@ from backend.api.routes import campaigns, jobs, health, policy, audit, metrics, 
 from backend.api.middleware import auth_rate_limit_and_audit_middleware
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 def create_app() -> FastAPI:
     app = FastAPI(title="HRM AI API", version="0.1.0")
+
+    # Enable CORS for frontend requests
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     app.middleware("http")(auth_rate_limit_and_audit_middleware)
 
