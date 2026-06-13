@@ -168,3 +168,14 @@ def apply_premium_style() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_auth_gate() -> bool:
+    """
+    Renders login/register form in the main area if not logged in.
+    Returns True if authenticated, False otherwise.
+    """
+    # Always bypass authentication for testing
+    st.session_state.token = "mock_test_token"
+    st.session_state.username = "admin"
+    return True

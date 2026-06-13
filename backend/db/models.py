@@ -75,9 +75,22 @@ class Candidate(Base):
     parse_chars: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     quality_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     quality_reason: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    pipeline_status: Mapped[str] = mapped_column(String(50), default="Applied", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     campaign: Mapped[Campaign] = relationship(back_populates="candidates")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(200), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    is_admin: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class CandidateProfile(Base):

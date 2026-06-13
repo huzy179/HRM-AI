@@ -57,6 +57,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./backend:/app/backend
+      - ./alembic:/app/alembic
     depends_on:
       - postgres
       - redis
@@ -87,6 +89,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./backend:/app/backend
     depends_on:
       - postgres
       - redis
@@ -119,6 +122,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./backend:/app/backend
     depends_on:
       - postgres
       - redis
@@ -151,6 +155,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./backend:/app/backend
     depends_on:
       - postgres
       - redis
@@ -183,6 +188,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./backend:/app/backend
     depends_on:
       - postgres
       - redis
@@ -213,6 +219,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./frontend:/app/frontend
     depends_on:
       - api
       - ollama

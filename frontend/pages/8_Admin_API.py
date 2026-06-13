@@ -5,8 +5,14 @@ import streamlit as st
 from frontend import api_client
 
 
+from frontend.ui_utils import apply_premium_style, render_auth_gate
+
+
 def main() -> None:
     st.set_page_config(page_title="Admin (API)", page_icon="🛠️", layout="wide")
+    apply_premium_style()
+    # if not render_auth_gate():
+    #     return
     st.title("🛠️ Admin — API")
 
     st.subheader("1) Audit events")

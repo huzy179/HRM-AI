@@ -28,6 +28,7 @@ class PolicyChatIn(BaseModel):
     query: str
     k: int = 5
     history: list[PolicyMessage] | None = None
+    doc_ids: list[str] | None = None
 
 
 class PolicyChatOut(BaseModel):
@@ -86,15 +87,29 @@ def list_policy_documents(session: SessionDep, limit: int = 200) -> list[PolicyD
     ]
 
 
+from fastapi.responses import StreamingResponse
+
 @router.post("/chat", response_model=PolicyChatOut)
 def chat_policy(payload: PolicyChatIn) -> PolicyChatOut:
     rag = PolicyRAG()
     history_list = [{"role": msg.role, "content": msg.content} for msg in payload.history] if payload.history else None
-    ans = rag.answer(query=payload.query, k=payload.k, history=history_list)
+    ans = rag.answer(query=payload.query, k=payload.k, history=history_list, doc_ids=payload.doc_ids)
     return PolicyChatOut(
         answer=ans.answer,
         citations=[{"source": c.source, "chunk_id": c.chunk_id, "score": c.score, "snippet": c.snippet} for c in ans.citations],
     )
+
+
+@router.post("/chat/stream")
+def chat_policy_stream(payload: PolicyChatIn) -> StreamingResponse:
+    rag = PolicyRAG()
+    history_list = [{"role": msg.role, "content": msg.content} for msg in payload.history] if payload.history else None
+
+    def generate():
+        for chunk in rag.stream_answer(query=payload.query, k=payload.k, history=history_list, doc_ids=payload.doc_ids):
+            yield chunk
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.post("/clear")

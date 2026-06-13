@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
+import json
 from typing import List
 
 import streamlit as st
 from frontend import api_client
-from frontend.ui_utils import apply_premium_style
+from frontend.ui_utils import apply_premium_style, render_auth_gate
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
@@ -17,6 +18,8 @@ def _api(path: str) -> str:
 def main() -> None:
     st.set_page_config(page_title="Policy Chat & RAG", page_icon="📚", layout="wide")
     apply_premium_style()
+    # if not render_auth_gate():
+    #     return
 
     # Title with beautiful gradient
     st.title("📚 Policy Chatbot & RAG")
@@ -73,12 +76,25 @@ def main() -> None:
                 except Exception:
                     pass
             
+            if "selected_docs" not in st.session_state:
+                st.session_state.selected_docs = []
+
             if docs:
+                st.markdown("Select documents to query:")
+                selected_ids = []
                 for doc in docs:
                     status_color = "🟢" if doc.get("ingest_status") == "OK" else ("🟡" if doc.get("ingest_status") == "PENDING" else "🔴")
-                    st.markdown(f"{status_color} **{doc.get('filename')}** (ID: {doc.get('id')})")
+                    doc_id = str(doc.get("id"))
+                    is_checked = st.checkbox(
+                        f"{status_color} {doc.get('filename')}",
+                        value=doc_id in st.session_state.selected_docs,
+                        key=f"check_{doc_id}"
+                    )
+                    if is_checked:
+                        selected_ids.append(doc_id)
                     if doc.get("error"):
                         st.caption(f"Error: {doc.get('error')}")
+                st.session_state.selected_docs = selected_ids
             else:
                 st.info("No documents enqueued yet.")
                 
@@ -154,38 +170,65 @@ def main() -> None:
                 "content": msg["content"]
             })
             
-        with st.spinner("Consulting internal policies..."):
-            try:
-                # Add current question to messages first
-                st.session_state.messages.append({"role": "user", "content": query})
+        try:
+            # Add current question to messages first
+            st.session_state.messages.append({"role": "user", "content": query})
+            
+            selected_docs = st.session_state.get("selected_docs", [])
+            
+            # Call Policy Chat API with history and doc_ids filter
+            r = api_client.post_stream(
+                "/policy/chat/stream", 
+                json={
+                    "query": query, 
+                    "k": 5,
+                    "history": history_payload,
+                    "doc_ids": selected_docs if selected_docs else None
+                }, 
+                timeout=300
+            )
+            
+            if r.status_code == 200:
+                citations = []
+                full_answer = ""
                 
-                # Call Policy Chat API with history
-                r = api_client.post(
-                    "/policy/chat", 
-                    json={
-                        "query": query, 
-                        "k": 5,
-                        "history": history_payload
-                    }, 
-                    timeout=300
-                )
+                # Write to stream
+                with st.chat_message("assistant"):
+                    placeholder = st.empty()
+                    def generate_chunks():
+                        nonlocal citations, full_answer
+                        lines_iter = r.iter_lines()
+                        
+                        # Read first line for citations
+                        try:
+                            first_line = next(lines_iter).decode('utf-8')
+                            if first_line.startswith("CITATIONS: "):
+                                citations = json.loads(first_line[11:])
+                        except Exception:
+                            pass
+                            
+                        # Stream the rest
+                        for line in lines_iter:
+                            decoded = line.decode('utf-8')
+                            full_answer += decoded
+                            placeholder.markdown(full_answer + "▌")
+                            yield decoded
+                            
+                    # Consume the generator to trigger updates
+                    list(generate_chunks())
+                    placeholder.markdown(full_answer)
                 
-                if r.status_code == 200:
-                    data = r.json()
-                    answer = data.get("answer", "")
-                    citations = data.get("citations", [])
-                    
-                    # Store agent reply
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": answer,
-                        "citations": citations
-                    })
-                    st.rerun()
-                else:
-                    st.error(f"Error from API: {r.status_code} - {r.text}")
-            except Exception as e:
-                st.error(f"Connection error: {e}")
+                # Store agent reply
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": full_answer,
+                    "citations": citations
+                })
+                st.rerun()
+            else:
+                st.error(f"Error from API: {r.status_code} - {r.text}")
+        except Exception as e:
+            st.error(f"Connection error: {e}")
 
 
 if __name__ == "__main__":

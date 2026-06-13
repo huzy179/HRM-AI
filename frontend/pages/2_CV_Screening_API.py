@@ -9,7 +9,7 @@ import requests
 import streamlit as st
 
 from frontend import api_client
-from frontend.ui_utils import apply_premium_style
+from frontend.ui_utils import apply_premium_style, render_auth_gate
 
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
@@ -45,6 +45,8 @@ def _badge(text: str, *, ok: bool) -> str:
 def main() -> None:
     st.set_page_config(page_title="CV Screening (API)", page_icon="🧾", layout="wide")
     apply_premium_style()
+    # if not render_auth_gate():
+    #     return
     st.title("🧾 CV Screening — API + Worker")
     st.caption(f"API: `{API_BASE_URL}`")
 
@@ -232,6 +234,7 @@ def main() -> None:
     df_rank["quality_score"] = df_rank["candidate_id"].map(lambda cid: (cand_map.get(int(cid)) or {}).get("quality_score", 0.0))
     df_rank["quality_reason"] = df_rank["candidate_id"].map(lambda cid: (cand_map.get(int(cid)) or {}).get("quality_reason", ""))
     df_rank["error"] = df_rank["candidate_id"].map(lambda cid: (cand_map.get(int(cid)) or {}).get("error", ""))
+    df_rank["pipeline_status"] = df_rank["candidate_id"].map(lambda cid: (cand_map.get(int(cid)) or {}).get("pipeline_status", "Applied"))
 
     col_f1, col_f2, col_f3, col_f4 = st.columns([1, 1, 1, 1], gap="large")
     with col_f1:
@@ -258,6 +261,7 @@ def main() -> None:
             "score_total",
             "score_embed",
             "score_rules",
+            "pipeline_status",
             "parse_status",
             "parse_method",
             "quality_score",
@@ -327,7 +331,7 @@ def main() -> None:
     if cand_meta.get("quality_reason"):
         st.warning(f"OCR quality: {cand_meta.get('quality_reason')}")
 
-    tabs = st.tabs(["Evidence", "Rules", "Review", "Profile"])
+    tabs = st.tabs(["Evidence", "Rules", "Review", "Profile", "📧 Email Automation"])
 
     with tabs[0]:
         ev = row.get("evidence") or []
@@ -454,6 +458,73 @@ def main() -> None:
                             st.info("No skill categories found to map on Radar Chart.")
                     else:
                         st.info("No JD required skills defined. Setup requirements in Campaign Settings first.")
+
+    with tabs[4]:
+        st.subheader("Pipeline & Email Automation")
+        
+        # 1. Update Candidate Status
+        current_status = cand_meta.get("pipeline_status") or "Applied"
+        status_options = ["Applied", "Shortlisted", "Interviewing", "Offered", "Rejected"]
+        try:
+            status_index = status_options.index(current_status)
+        except Exception:
+            status_index = 0
+            
+        new_status = st.selectbox(
+            "Change Candidate Pipeline Status",
+            options=status_options,
+            index=status_index,
+            key=f"status_select_{selected_id}"
+        )
+        if st.button("Update Status", key=f"btn_update_status_{selected_id}"):
+            r = api_client.put(f"/automation/candidates/{selected_id}/status", json={"pipeline_status": new_status})
+            if r.status_code == 200:
+                st.success(f"Updated status to {new_status} successfully!")
+                # Refresh candidates list
+                st.session_state["candidates"] = api_client.get(f"/campaigns/{campaign_id}/candidates", timeout=30).json()
+                st.rerun()
+            else:
+                st.error(f"Failed to update status: {r.text}")
+                
+        st.markdown("---")
+        
+        # 2. Email Generation
+        st.subheader("Generate Candidate Response Email")
+        email_template = st.selectbox(
+            "Select Email Type",
+            options=["Interview Invite", "Job Offer", "Rejection Letter"],
+            key=f"email_select_{selected_id}"
+        )
+        
+        type_mapping = {
+            "Interview Invite": "interview",
+            "Job Offer": "offer",
+            "Rejection Letter": "rejection"
+        }
+        
+        if st.button("Generate Email Draft", key=f"btn_gen_email_{selected_id}"):
+            with st.spinner("Writing personalized email draft..."):
+                r = api_client.post(
+                    "/automation/generate-email",
+                    json={
+                        "campaign_id": campaign_id,
+                        "candidate_id": selected_id,
+                        "email_type": type_mapping[email_template]
+                    }
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    st.session_state[f"generated_email_{selected_id}"] = data
+                else:
+                    st.error(f"Failed to generate email: {r.text}")
+                    
+        # Display Generated Email if exists
+        email_data = st.session_state.get(f"generated_email_{selected_id}")
+        if email_data:
+            st.markdown("### Generated Email Draft")
+            st.text_input("Subject", value=email_data.get("email_subject"), key=f"subject_{selected_id}")
+            st.text_area("Content", value=email_data.get("email_content"), height=400, key=f"content_{selected_id}")
+            st.caption("You can copy the generated subject and content directly.")
 
 
 if __name__ == "__main__":

@@ -84,11 +84,20 @@ class PolicyRAG:
             self.store.add_texts(texts=chunks, metadatas=metadatas, ids=ids)
         return len(chunks)
 
-    def retrieve(self, *, query: str, k: int = 5) -> List[PolicyCitation]:
+    def retrieve(self, *, query: str, k: int = 5, doc_ids: list[str] | None = None) -> List[PolicyCitation]:
         q = normalize_text(query)
         # Query k * 3 candidates for reranking pool
         candidates_k = k * 3
-        hits = self.store.similarity_search_with_score(q, k=candidates_k)
+        
+        search_filter = None
+        if doc_ids:
+            cleaned_ids = [str(x).strip() for x in doc_ids if str(x).strip()]
+            if len(cleaned_ids) == 1:
+                search_filter = {"doc_id": cleaned_ids[0]}
+            elif len(cleaned_ids) > 1:
+                search_filter = {"doc_id": {"$in": cleaned_ids}}
+
+        hits = self.store.similarity_search_with_score(q, k=candidates_k, filter=search_filter)
         
         citations: List[PolicyCitation] = []
         for doc, distance in hits:
@@ -122,8 +131,8 @@ class PolicyRAG:
         citations.sort(key=lambda x: x.score, reverse=True)
         return citations[:k]
 
-    def answer(self, *, query: str, k: int = 5, history: list[dict] | None = None) -> PolicyAnswer:
-        citations = self.retrieve(query=query, k=k)
+    def answer(self, *, query: str, k: int = 5, history: list[dict] | None = None, doc_ids: list[str] | None = None) -> PolicyAnswer:
+        citations = self.retrieve(query=query, k=k, doc_ids=doc_ids)
         if not citations:
             return PolicyAnswer(answer="Không tìm thấy trong tài liệu", citations=[])
         context = "\n\n---\n\n".join(
@@ -154,3 +163,44 @@ class PolicyRAG:
         )
         text = (getattr(resp, "content", "") or "").strip()
         return PolicyAnswer(answer=text, citations=citations)
+
+    def stream_answer(self, *, query: str, k: int = 5, history: list[dict] | None = None, doc_ids: list[str] | None = None) -> Generator[str, None, None]:
+        citations = self.retrieve(query=query, k=k, doc_ids=doc_ids)
+        if not citations:
+            yield "CITATIONS: []\n"
+            yield "Không tìm thấy trong tài liệu"
+            return
+
+        # Yield citations first as a special prefix line
+        import json
+        citations_data = [{"source": c.source, "chunk_id": c.chunk_id, "score": c.score, "snippet": c.snippet} for c in citations]
+        yield "CITATIONS: " + json.dumps(citations_data) + "\n"
+
+        context = "\n\n---\n\n".join(
+            f"SOURCE: {c.source} | CHUNK: {c.chunk_id}\n{c.snippet}" for c in citations
+        )
+
+        history_str = ""
+        if history:
+            history_str = "LỊCH SỬ HỘI THOẠI TRƯỚC ĐÓ:\n"
+            for msg in history:
+                role = "User" if msg.get("role") == "user" else "Assistant"
+                history_str += f"{role}: {msg.get('content')}\n"
+            history_str += "\n"
+
+        prompt = (
+            "Bạn là trợ lý HR trả lời dựa trên tài liệu nội bộ.\n"
+            "Chỉ dùng thông tin trong CONTEXT. Nếu không đủ thông tin, trả lời: \"Không tìm thấy trong tài liệu\".\n\n"
+            f"CONTEXT:\n{context}\n\n"
+            f"{history_str}"
+            f"QUESTION:\n{query.strip()}\n\n"
+            "Trả lời ngắn gọn, rõ ràng."
+        )
+
+        try:
+            for chunk in self.llm.stream(prompt):
+                content = getattr(chunk, "content", "") or ""
+                if content:
+                    yield content
+        except Exception as e:
+            yield f"\n[Lỗi kết nối Ollama: {e}]"
