@@ -9,6 +9,7 @@ import requests
 import streamlit as st
 
 from frontend import api_client
+from frontend.ui_utils import apply_premium_style
 
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
@@ -43,6 +44,7 @@ def _badge(text: str, *, ok: bool) -> str:
 
 def main() -> None:
     st.set_page_config(page_title="CV Screening (API)", page_icon="🧾", layout="wide")
+    apply_premium_style()
     st.title("🧾 CV Screening — API + Worker")
     st.caption(f"API: `{API_BASE_URL}`")
 
@@ -80,8 +82,8 @@ def main() -> None:
     with col_b:
         st.subheader("2) Upload JD")
         jd = st.file_uploader(
-            "JD file (PDF/TXT/PNG/JPG)",
-            type=["pdf", "txt", "png", "jpg", "jpeg"],
+            "JD file (PDF/TXT/DOCX/MD/PNG/JPG)",
+            type=["pdf", "txt", "docx", "md", "png", "jpg", "jpeg"],
             accept_multiple_files=False,
         )
         if st.button("Upload JD") and jd is not None:
@@ -92,8 +94,8 @@ def main() -> None:
 
     st.subheader("3) Upload CVs")
     cvs = st.file_uploader(
-        "CV files (PDF/PNG/JPG)",
-        type=["pdf", "png", "jpg", "jpeg"],
+        "CV files (PDF/DOCX/MD/PNG/JPG)",
+        type=["pdf", "docx", "md", "png", "jpg", "jpeg"],
         accept_multiple_files=True,
     )
     if st.button("Upload CVs") and cvs:
@@ -203,17 +205,26 @@ def main() -> None:
         st.info("Nhấn `Get ranking` để xem kết quả.")
         return
 
-    df_rank = ranking_df.copy()
-    sort_col = "score_total" if "score_total" in df_rank.columns else ("score" if "score" in df_rank.columns else None)
-    if sort_col:
-        df_rank = df_rank.sort_values(sort_col, ascending=False)
-
     cand_map: Dict[int, Dict[str, Any]] = {}
     for c in candidates or []:
         try:
             cand_map[int(c.get("id"))] = c
         except Exception:
             continue
+
+    # Visualizing top candidates using bar chart
+    with st.expander("📊 Score Distribution & Visual Comparison", expanded=True):
+        temp_chart_df = ranking_df.copy()
+        if not temp_chart_df.empty:
+            temp_chart_df["filename"] = temp_chart_df["candidate_id"].map(lambda cid: (cand_map.get(int(cid)) or {}).get("filename", f"Candidate {cid}"))
+            chart_data = temp_chart_df.head(10)[["filename", "score_total", "score_embed", "score_rules"]].copy()
+            chart_data = chart_data.set_index("filename")
+            st.bar_chart(chart_data, y=["score_total", "score_embed", "score_rules"], use_container_width=True)
+
+    df_rank = ranking_df.copy()
+    sort_col = "score_total" if "score_total" in df_rank.columns else ("score" if "score" in df_rank.columns else None)
+    if sort_col:
+        df_rank = df_rank.sort_values(sort_col, ascending=False)
 
     df_rank["filename"] = df_rank["candidate_id"].map(lambda cid: (cand_map.get(int(cid)) or {}).get("filename", ""))
     df_rank["parse_status"] = df_rank["candidate_id"].map(lambda cid: (cand_map.get(int(cid)) or {}).get("parse_status", ""))
@@ -275,6 +286,17 @@ def main() -> None:
         st.dataframe(df_view.style.apply(_style, axis=1), use_container_width=True, height=320)
     except Exception:
         st.dataframe(df_view, use_container_width=True, height=320)
+
+    if not df_view.empty:
+        csv_data = df_view.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Screening Report (CSV)",
+            data=csv_data,
+            file_name=f"campaign_{campaign_id}_screening_report.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="btn_download_csv_report"
+        )
 
     st.subheader("6.2) Candidate drill-down")
     visible_candidate_ids = df_view["candidate_id"].tolist() if not df_view.empty else []
@@ -356,15 +378,82 @@ def main() -> None:
                 else:
                     st.error(payload)
         with col_p2:
-            if st.button("Get profile", key="btn_get_profile"):
-                r = api_client.get(
+            if st.button("Get profile & View Radar Match", key="btn_get_profile"):
+                r_profile = api_client.get(
                     f"/campaigns/{campaign_id}/candidates/{selected_id}/profile",
                     timeout=30,
                 )
-                if r.status_code != 200:
-                    st.error(r.text)
+                r_reqs = api_client.get(
+                    f"/campaigns/{campaign_id}/requirements",
+                    timeout=30,
+                )
+                if r_profile.status_code != 200:
+                    st.error(r_profile.text)
                 else:
-                    st.json(r.json())
+                    profile_data = r_profile.json()
+                    st.subheader("Candidate Details")
+                    st.json(profile_data)
+                    
+                    # Parse skills and render Radar Chart
+                    reqs_data = {}
+                    if r_reqs.status_code == 200:
+                        try:
+                            reqs_data = r_reqs.json()
+                        except Exception:
+                            pass
+                    
+                    import json
+                    try:
+                        cand_skills = json.loads(profile_data.get("skills_json") or "[]")
+                        if isinstance(cand_skills, str):
+                            cand_skills = json.loads(cand_skills)
+                    except Exception:
+                        cand_skills = []
+                    
+                    req_skills = reqs_data.get("required_skills") or []
+                    if not req_skills and reqs_data.get("jd_skills"):
+                        req_skills = reqs_data.get("jd_skills")
+                    
+                    if req_skills:
+                        import plotly.graph_objects as go
+                        
+                        cand_skills_lower = {str(s).strip().lower() for s in cand_skills}
+                        categories = [str(s).strip() for s in req_skills if str(s).strip()]
+                        
+                        if categories:
+                            fig = go.Figure()
+                            # JD Requirements
+                            fig.add_trace(go.Scatterpolar(
+                                  r=[1] * len(categories),
+                                  theta=categories,
+                                  fill='toself',
+                                  name='JD Requirements',
+                                  line_color='rgba(59, 130, 246, 0.6)'
+                            ))
+                            # Candidate match values
+                            cand_values = [1 if c.lower() in cand_skills_lower else 0 for c in categories]
+                            fig.add_trace(go.Scatterpolar(
+                                  r=cand_values,
+                                  theta=categories,
+                                  fill='toself',
+                                  name='Candidate Skills',
+                                  line_color='rgba(239, 68, 68, 0.8)'
+                            ))
+                            
+                            fig.update_layout(
+                              polar=dict(
+                                radialaxis=dict(
+                                  visible=True,
+                                  range=[0, 1]
+                                )),
+                              showlegend=True,
+                              title="Radar Chart: Candidate Skills Match vs JD Requirements"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("No skill categories found to map on Radar Chart.")
+                    else:
+                        st.info("No JD required skills defined. Setup requirements in Campaign Settings first.")
 
 
 if __name__ == "__main__":

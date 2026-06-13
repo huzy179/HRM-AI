@@ -19,9 +19,15 @@ from backend.api.security import require_admin
 router = APIRouter()
 
 
+class PolicyMessage(BaseModel):
+    role: str
+    content: str
+
+
 class PolicyChatIn(BaseModel):
     query: str
     k: int = 5
+    history: list[PolicyMessage] | None = None
 
 
 class PolicyChatOut(BaseModel):
@@ -83,7 +89,8 @@ def list_policy_documents(session: SessionDep, limit: int = 200) -> list[PolicyD
 @router.post("/chat", response_model=PolicyChatOut)
 def chat_policy(payload: PolicyChatIn) -> PolicyChatOut:
     rag = PolicyRAG()
-    ans = rag.answer(query=payload.query, k=payload.k)
+    history_list = [{"role": msg.role, "content": msg.content} for msg in payload.history] if payload.history else None
+    ans = rag.answer(query=payload.query, k=payload.k, history=history_list)
     return PolicyChatOut(
         answer=ans.answer,
         citations=[{"source": c.source, "chunk_id": c.chunk_id, "score": c.score, "snippet": c.snippet} for c in ans.citations],

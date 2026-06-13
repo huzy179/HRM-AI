@@ -77,6 +77,87 @@ def _extract_years(text: str) -> float:
 def extract_candidate_profile(text: str) -> CandidateProfileExtracted:
     t = text or ""
 
+    # Try LLM extraction first
+    try:
+        from langchain_ollama import ChatOllama
+        from backend.core.config import get_settings
+        from backend.services.ollama_utils import invoke_with_retry
+        import json
+
+        s = get_settings()
+        llm = ChatOllama(
+            model=s.ollama_chat_model,
+            base_url=s.ollama_base_url,
+            temperature=0,
+            format="json",
+            client_kwargs={"timeout": s.ollama_timeout_s},
+        )
+
+        prompt = (
+            "Bạn là trợ lý AI chuyên trích xuất thông tin hồ sơ từ CV tuyển dụng.\n"
+            "Hãy phân tích văn bản CV dưới đây và trích xuất các thông tin chính xác nhất.\n"
+            "Định dạng trả về PHẢI là một đối tượng JSON hợp lệ duy nhất, không có markdown hoặc text ngoài, theo cấu trúc:\n"
+            "{\n"
+            '  "name": "Họ tên đầy đủ của ứng viên (nếu tìm thấy, nếu không để trống)",\n'
+            '  "email": "Địa chỉ email (nếu tìm thấy, nếu không để trống)",\n'
+            '  "phone": "Số điện thoại liên hệ (nếu tìm thấy, nếu không để trống)",\n'
+            '  "years_experience": số năm kinh nghiệm làm việc thực tế (trả về kiểu số thực, ví dụ: 2.5 hoặc 5.0, mặc định là 0.0 nếu chưa có kinh nghiệm hoặc không tìm thấy)",\n'
+            '  "education": "Tên trường đại học và chuyên ngành hoặc bằng cấp cao nhất (nếu tìm thấy, nếu không để trống)",\n'
+            '  "skills": ["danh sách các kỹ năng chuyên môn, lập trình, công nghệ của ứng viên, dạng mảng các chuỗi"]\n'
+            "}\n\n"
+            "VĂN BẢN CV:\n"
+            f"{t}\n"
+        )
+
+        response = invoke_with_retry(
+            llm,
+            prompt,
+            retries=s.ollama_retries,
+            backoff_s=s.ollama_retry_backoff_s,
+        )
+        content = (getattr(response, "content", "") or "").strip()
+        data = json.loads(content)
+
+        # Parse extracted values
+        name = str(data.get("name") or "").strip()
+        email = str(data.get("email") or "").strip()
+        phone = str(data.get("phone") or "").strip()
+        
+        try:
+            years = float(data.get("years_experience") or 0.0)
+        except Exception:
+            years = 0.0
+            
+        education = str(data.get("education") or "").strip()
+        skills = [str(x).strip().lower() for x in (data.get("skills") or []) if str(x).strip()]
+        
+        # Fallback fields if LLM leaves crucial items empty but they exist in text
+        if not email:
+            m = _EMAIL_RE.search(t)
+            if m:
+                email = m.group(0).strip()
+        if not phone:
+            m2 = _PHONE_RE.search(t)
+            if m2:
+                phone = (m2.group(0) or "").strip()
+
+        # Cap experience
+        years = float(max(0.0, min(50.0, years)))
+
+        if name or email or phone or skills or education:
+            return CandidateProfileExtracted(
+                name=name,
+                email=email,
+                phone=phone,
+                years_experience=years,
+                education=education,
+                skills=sorted(list(set(skills))),
+            )
+    except Exception:
+        # Fallback gracefully
+        pass
+
+    # Existing rule-based fallback
     email = ""
     m = _EMAIL_RE.search(t)
     if m:
@@ -87,7 +168,6 @@ def extract_candidate_profile(text: str) -> CandidateProfileExtracted:
     if m2:
         phone = (m2.group(0) or "").strip()
 
-    # naive name heuristic: first non-empty line, filtered for noise
     name = _first_non_empty_line(t)
     if len(name) > 80 or ("@" in name) or any(k in name.lower() for k in ["curriculum", "resume", "cv"]):
         name = ""
@@ -95,7 +175,7 @@ def extract_candidate_profile(text: str) -> CandidateProfileExtracted:
     years = _extract_years(t)
 
     lower = t.lower()
-    skills: list[str] = []
+    skills = []
     for kw in _SKILL_KEYWORDS:
         if kw in lower:
             skills.append(kw)

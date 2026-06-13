@@ -86,7 +86,10 @@ class PolicyRAG:
 
     def retrieve(self, *, query: str, k: int = 5) -> List[PolicyCitation]:
         q = normalize_text(query)
-        hits = self.store.similarity_search_with_score(q, k=k)
+        # Query k * 3 candidates for reranking pool
+        candidates_k = k * 3
+        hits = self.store.similarity_search_with_score(q, k=candidates_k)
+        
         citations: List[PolicyCitation] = []
         for doc, distance in hits:
             meta = dict(doc.metadata or {})
@@ -95,9 +98,31 @@ class PolicyRAG:
             similarity = 1.0 / (1.0 + float(distance))
             snippet = (doc.page_content or "").strip()[:400]
             citations.append(PolicyCitation(source=source, chunk_id=chunk_id, score=similarity, snippet=snippet))
-        return citations
+            
+        # Hybrid Keyword Reranker: calculate token overlap ratio and compute a hybrid score
+        q_tokens = set(q.lower().split())
+        if q_tokens:
+            reranked_citations: List[PolicyCitation] = []
+            for c in citations:
+                c_tokens = set(c.snippet.lower().split())
+                overlap = len(q_tokens.intersection(c_tokens)) / len(q_tokens) if q_tokens else 0.0
+                # Hybrid score = 0.6 * dense_similarity + 0.4 * sparse_keyword_overlap
+                hybrid_score = 0.6 * c.score + 0.4 * overlap
+                reranked_citations.append(
+                    PolicyCitation(
+                        source=c.source,
+                        chunk_id=c.chunk_id,
+                        score=hybrid_score,
+                        snippet=c.snippet
+                    )
+                )
+            citations = reranked_citations
+            
+        # Sort and return top k
+        citations.sort(key=lambda x: x.score, reverse=True)
+        return citations[:k]
 
-    def answer(self, *, query: str, k: int = 5) -> PolicyAnswer:
+    def answer(self, *, query: str, k: int = 5, history: list[dict] | None = None) -> PolicyAnswer:
         citations = self.retrieve(query=query, k=k)
         if not citations:
             return PolicyAnswer(answer="Không tìm thấy trong tài liệu", citations=[])
@@ -105,10 +130,19 @@ class PolicyRAG:
             f"SOURCE: {c.source} | CHUNK: {c.chunk_id}\n{c.snippet}" for c in citations
         )
 
+        history_str = ""
+        if history:
+            history_str = "LỊCH SỬ HỘI THOẠI TRƯỚC ĐÓ:\n"
+            for msg in history:
+                role = "User" if msg.get("role") == "user" else "Assistant"
+                history_str += f"{role}: {msg.get('content')}\n"
+            history_str += "\n"
+
         prompt = (
             "Bạn là trợ lý HR trả lời dựa trên tài liệu nội bộ.\n"
             "Chỉ dùng thông tin trong CONTEXT. Nếu không đủ thông tin, trả lời: \"Không tìm thấy trong tài liệu\".\n\n"
             f"CONTEXT:\n{context}\n\n"
+            f"{history_str}"
             f"QUESTION:\n{query.strip()}\n\n"
             "Trả lời ngắn gọn, rõ ràng."
         )

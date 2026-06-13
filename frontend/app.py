@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import streamlit as st
+from frontend.ui_utils import apply_premium_style
 
 
 def main() -> None:
@@ -9,6 +10,7 @@ def main() -> None:
         page_icon="📋",
         layout="wide",
     )
+    apply_premium_style()
 
     st.title("📋 HRM AI — Phase 1: CV Screening")
     st.caption("MVP: Upload CV (PDF) + nhập JD → parse → embeddings (Ollama) → rank.")

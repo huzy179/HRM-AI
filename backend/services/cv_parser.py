@@ -183,10 +183,30 @@ def parse_cv(pdf_path: str | Path, *, fallback_pdfplumber: bool = True) -> CVPar
     return CVParseResult(cv_id=cv_id, raw_text=raw_text, error=error, method=method)
 
 
+def extract_text_docx(docx_path: str | Path) -> str:
+    import docx
+    doc = docx.Document(docx_path)
+    full_text: list[str] = []
+    for paragraph in doc.paragraphs:
+        if paragraph.text.strip():
+            full_text.append(paragraph.text)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text.strip():
+                    full_text.append(cell.text)
+    return "\n".join(full_text)
+
+
+def extract_text_markdown(md_path: str | Path) -> str:
+    with open(md_path, "r", encoding="utf-8", errors="ignore") as f:
+        return f.read()
+
+
 def parse_file(path: str | Path) -> CVParseResult:
     """
-    Parse either PDF (text/OCR) or image scan (OCR).
-    Supported: .pdf, .png, .jpg, .jpeg
+    Parse either PDF (text/OCR), image scan (OCR), Word document, or Markdown text.
+    Supported: .pdf, .png, .jpg, .jpeg, .docx, .md
     """
     p = Path(path)
     suffix = p.suffix.lower()
@@ -201,5 +221,29 @@ def parse_file(path: str | Path) -> CVParseResult:
                 raw_text="",
                 error=f"PARSE_ERROR: {exc.__class__.__name__}: {exc}",
                 method="ocr_image",
+            )
+    elif suffix == ".docx":
+        try:
+            text = normalize_text(extract_text_docx(p))
+            err = None if text else "EMPTY_TEXT"
+            return CVParseResult(cv_id=p.name, raw_text=text, error=err, method="docx")
+        except Exception as exc:  # noqa: BLE001
+            return CVParseResult(
+                cv_id=p.name,
+                raw_text="",
+                error=f"PARSE_ERROR: {exc.__class__.__name__}: {exc}",
+                method="docx",
+            )
+    elif suffix == ".md":
+        try:
+            text = normalize_text(extract_text_markdown(p))
+            err = None if text else "EMPTY_TEXT"
+            return CVParseResult(cv_id=p.name, raw_text=text, error=err, method="markdown")
+        except Exception as exc:  # noqa: BLE001
+            return CVParseResult(
+                cv_id=p.name,
+                raw_text="",
+                error=f"PARSE_ERROR: {exc.__class__.__name__}: {exc}",
+                method="markdown",
             )
     return parse_cv(p)
