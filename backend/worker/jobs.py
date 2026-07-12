@@ -60,7 +60,7 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
         if job_type == "parse_jd":
             _parse_jd(payload["campaign_id"], job_id)
         elif job_type == "parse_cvs":
-            _parse_cvs(payload["campaign_id"], job_id)
+            _parse_cvs(payload["campaign_id"], job_id, candidate_ids=payload.get("candidate_ids") or None)
         elif job_type == "screen_campaign":
             _screen_campaign(payload["campaign_id"], job_id)
         elif job_type == "review_candidate":
@@ -154,16 +154,17 @@ def _parse_jd(campaign_id: int, job_id: str) -> None:
     _update_job(job_id, progress=100)
 
 
-def _parse_cvs(campaign_id: int, job_id: str) -> None:
+def _parse_cvs(campaign_id: int, job_id: str, candidate_ids: list[int] | None = None) -> None:
     session = SessionLocal()
     try:
         tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
-        candidates = (
+        query = (
             session.query(models.Candidate)
             .filter(models.Candidate.campaign_id == campaign_id, models.Candidate.tenant_id == tenant_id)
-            .order_by(models.Candidate.id.asc())
-            .all()
         )
+        if candidate_ids:
+            query = query.filter(models.Candidate.id.in_([int(x) for x in candidate_ids]))
+        candidates = query.order_by(models.Candidate.id.asc()).all()
         total = max(len(candidates), 1)
         for idx, cand in enumerate(candidates):
             if cand.parse_status == "OK" and (cand.text or "").strip() and not (cand.error or "").strip():

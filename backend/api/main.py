@@ -4,6 +4,8 @@ from fastapi import FastAPI
 
 from backend.api.routes import campaigns, jobs, health, policy, audit, metrics, admin, automation
 from backend.api.middleware import auth_rate_limit_and_audit_middleware
+from backend.db.models import Base
+from backend.db.session import engine
 from backend.observability.telemetry import setup_telemetry
 
 
@@ -11,6 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 def create_app() -> FastAPI:
     app = FastAPI(title="HRM AI API", version="0.1.0")
+
+    @app.on_event("startup")
+    def ensure_database_schema() -> None:
+        Base.metadata.create_all(bind=engine)
 
     # Enable CORS for frontend requests
     app.add_middleware(

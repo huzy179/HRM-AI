@@ -58,8 +58,11 @@ docker compose --profile legacy up --build worker
 - Loki nhận log container qua Promtail
 - OpenTelemetry traces được gửi sang Jaeger khi `OTEL_EXPORTER_OTLP_ENDPOINT` được set
 
-Ragas Policy RAG eval:
+Ragas Policy RAG eval (tách khỏi runtime image để Docker build nhẹ hơn):
 
 ```bash
-docker compose exec api python evals/ragas_policy_eval.py --input evals/policy_eval_questions.jsonl
+python3 -m venv .venv-evals
+. .venv-evals/bin/activate
+pip install -r backend/requirements.txt -r evals/requirements.txt
+python evals/ragas_policy_eval.py --input evals/policy_eval_questions.jsonl
 ```

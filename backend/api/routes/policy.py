@@ -45,6 +45,26 @@ class PolicyDocumentOut(BaseModel):
     error: str | None = None
 
 
+def _ready_policy_doc_count(session: SessionDep, doc_ids: list[str] | None = None) -> int:
+    tenant_id = current_tenant_id()
+    query = session.query(models.PolicyDocument).filter(
+        models.PolicyDocument.tenant_id == tenant_id,
+        models.PolicyDocument.ingest_status == "OK",
+    )
+    if doc_ids:
+        cleaned_ids = [int(x) for x in doc_ids if str(x).strip().isdigit()]
+        if not cleaned_ids:
+            return 0
+        query = query.filter(models.PolicyDocument.id.in_(cleaned_ids))
+    return query.count()
+
+
+def _no_policy_docs_message(doc_ids: list[str] | None = None) -> str:
+    if doc_ids:
+        return "Các tài liệu đang chọn chưa ingest xong hoặc không có trong kho tri thức. Hãy chờ xử lý xong rồi thử lại."
+    return "Chưa có tài liệu chính sách nào được ingest. Hãy upload tài liệu ở cột bên trái trước khi chat."
+
+
 @router.post("/ingest")
 async def ingest_policy(session: SessionDep, files: List[UploadFile] = File(...)) -> dict:
     tenant_id = current_tenant_id()
@@ -92,9 +112,12 @@ def list_policy_documents(session: SessionDep, limit: int = 200) -> list[PolicyD
 from fastapi.responses import StreamingResponse
 
 @router.post("/chat", response_model=PolicyChatOut)
-def chat_policy(payload: PolicyChatIn) -> PolicyChatOut:
+def chat_policy(payload: PolicyChatIn, session: SessionDep) -> PolicyChatOut:
     start = time.time()
     tenant_id = current_tenant_id()
+    if _ready_policy_doc_count(session, payload.doc_ids) == 0:
+        return PolicyChatOut(answer=_no_policy_docs_message(payload.doc_ids), citations=[])
+
     rag = PolicyRAG()
     history_list = [{"role": msg.role, "content": msg.content} for msg in payload.history] if payload.history else None
     try:
@@ -113,13 +136,26 @@ def chat_policy(payload: PolicyChatIn) -> PolicyChatOut:
 
 
 @router.post("/chat/stream")
-def chat_policy_stream(payload: PolicyChatIn) -> StreamingResponse:
+def chat_policy_stream(payload: PolicyChatIn, session: SessionDep) -> StreamingResponse:
+    if _ready_policy_doc_count(session, payload.doc_ids) == 0:
+        message = _no_policy_docs_message(payload.doc_ids)
+
+        def empty_generate():
+            yield "CITATIONS: []\n"
+            yield message
+
+        return StreamingResponse(empty_generate(), media_type="text/event-stream")
+
     rag = PolicyRAG()
     history_list = [{"role": msg.role, "content": msg.content} for msg in payload.history] if payload.history else None
 
     def generate():
-        for chunk in rag.stream_answer(query=payload.query, k=payload.k, history=history_list, doc_ids=payload.doc_ids):
-            yield chunk
+        try:
+            for chunk in rag.stream_answer(query=payload.query, k=payload.k, history=history_list, doc_ids=payload.doc_ids):
+                yield chunk
+        except Exception as exc:
+            yield "CITATIONS: []\n"
+            yield f"Không thể gọi mô hình LLM/embedding. Kiểm tra Ollama model đã được pull chưa. Chi tiết: {exc}"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 

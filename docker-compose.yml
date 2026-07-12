@@ -1,19 +1,46 @@
-services:
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    volumes:
-      - ollama:/root/.ollama
+x-backend-build: &backend-build
+  context: .
+  dockerfile: Dockerfile
 
+x-backend-env: &backend-env
+  OLLAMA_BASE_URL: http://ollama:11434
+  OLLAMA_TIMEOUT_S: "60"
+  OLLAMA_RETRIES: "2"
+  OLLAMA_RETRY_BACKOFF_S: "1.0"
+  DATABASE_URL: postgresql+psycopg://hrm:hrm@postgres:5432/hrm
+  REDIS_URL: redis://redis:6379/0
+  TENANT_ID: default
+  OCR_LANG: vie+eng
+  OCR_DPI: "300"
+  OCR_PSM: "6"
+  OCR_OEM: "1"
+  OCR_CROP_RATIO: "0.05"
+  ANONYMIZED_TELEMETRY: "False"
+  POSTHOG_DISABLED: "1"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+
+x-worker-env: &worker-env
+  <<: *backend-env
+  LOG_LEVEL: INFO
+
+x-backend-volumes: &backend-volumes
+  - ./data:/app/data
+  - ./uploads:/app/uploads
+  - ./backend:/app/backend
+
+x-backend-depends: &backend-depends
+  - postgres
+  - redis
+  - ollama
+
+services:
+  # Core infrastructure
   postgres:
     image: postgres:16
     environment:
-      - POSTGRES_DB=hrm
-      - POSTGRES_USER=hrm
-      - POSTGRES_PASSWORD=hrm
+      POSTGRES_DB: hrm
+      POSTGRES_USER: hrm
+      POSTGRES_PASSWORD: hrm
     ports:
       - "5432:5432"
     volumes:
@@ -23,6 +50,133 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+    volumes:
+      - ollama:/root/.ollama
+
+  # Backend API
+  api:
+    build: *backend-build
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *backend-env
+      # Auth is opt-in for local development.
+      # HRM_API_KEYS: dev_key_123,dev_key_456
+      # HRM_ADMIN_API_KEYS: admin_key_123
+      AUDIT_RETENTION_DAYS: "30"
+      RATE_LIMIT_PER_MIN: "120"
+      RATE_LIMIT_AUTH_BONUS: "180"
+      OTEL_SERVICE_NAME: hrm-ai-api
+    volumes:
+      - ./alembic:/app/alembic
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./backend:/app/backend
+    depends_on: *backend-depends
+    command: ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  # Queue workers
+  worker_parse:
+    build: *backend-build
+    restart: unless-stopped
+    environment:
+      <<: *worker-env
+      WORKER_QUEUES: parse,default
+      OTEL_SERVICE_NAME: hrm-ai-worker-parse
+    volumes: *backend-volumes
+    depends_on: *backend-depends
+    command: ["python", "-m", "backend.worker.run_worker"]
+
+  worker_index:
+    build: *backend-build
+    restart: unless-stopped
+    environment:
+      <<: *worker-env
+      WORKER_QUEUES: index,default
+      OTEL_SERVICE_NAME: hrm-ai-worker-index
+    volumes: *backend-volumes
+    depends_on: *backend-depends
+    command: ["python", "-m", "backend.worker.run_worker"]
+
+  worker_llm:
+    build: *backend-build
+    restart: unless-stopped
+    environment:
+      <<: *worker-env
+      WORKER_QUEUES: llm,default
+      OTEL_SERVICE_NAME: hrm-ai-worker-llm
+    volumes: *backend-volumes
+    depends_on: *backend-depends
+    command: ["python", "-m", "backend.worker.run_worker"]
+
+  worker:
+    profiles: ["legacy"]
+    build: *backend-build
+    environment:
+      <<: *worker-env
+      WORKER_QUEUES: parse,index,llm,default
+      OTEL_SERVICE_NAME: hrm-ai-worker-legacy
+    volumes: *backend-volumes
+    depends_on: *backend-depends
+    command: ["python", "-m", "backend.worker.run_worker"]
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      TENANT_ID: default
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/next.config.ts:/app/next.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+    depends_on:
+      - api
+      - ollama
+    command: ["npm", "run", "dev"]
+
+  # Observability
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus:/prometheus
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
 
   loki:
     image: grafana/loki:3.3.2
@@ -42,35 +196,6 @@ services:
     depends_on:
       - loki
 
-  prometheus:
-    image: prom/prometheus:v3.1.0
-    ports:
-      - "9090:9090"
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus:/prometheus
-    depends_on:
-      - api
-
-  grafana:
-    image: grafana/grafana:11.4.0
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    depends_on:
-      - prometheus
-      - loki
-      - jaeger
-
   jaeger:
     image: jaegertracing/all-in-one:1.63.0
     ports:
@@ -78,215 +203,11 @@ services:
       - "4317:4317"
       - "4318:4318"
     environment:
-      - COLLECTOR_OTLP_ENABLED=true
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_TIMEOUT_S=60
-      - OLLAMA_RETRIES=2
-      - OLLAMA_RETRY_BACKOFF_S=1.0
-      # Phase 6 (opt-in): set HRM_API_KEYS to enable auth (comma-separated)
-      # - HRM_API_KEYS=dev_key_123,dev_key_456
-      # Optional admin keys for dangerous endpoints
-      # - HRM_ADMIN_API_KEYS=admin_key_123
-      # Phase 7: tenant namespace for policy index
-      - TENANT_ID=default
-      # Audit retention (used by /audit/purge)
-      - AUDIT_RETENTION_DAYS=30
-      - RATE_LIMIT_PER_MIN=120
-      - RATE_LIMIT_AUTH_BONUS=180
-      - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
-      - REDIS_URL=redis://redis:6379/0
-      - OCR_LANG=vie+eng
-      - OCR_DPI=300
-      - OCR_PSM=6
-      - OCR_OEM=1
-      - OCR_CROP_RATIO=0.05
-      - ANONYMIZED_TELEMETRY=False
-      - POSTHOG_DISABLED=1
-      - OTEL_SERVICE_NAME=hrm-ai-api
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-    volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
-      - ./backend:/app/backend
-      - ./alembic:/app/alembic
-    depends_on:
-      - postgres
-      - redis
-      - ollama
-    command: ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
-  worker:
-    profiles: ["legacy"]
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_TIMEOUT_S=60
-      - OLLAMA_RETRIES=2
-      - OLLAMA_RETRY_BACKOFF_S=1.0
-      - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
-      - REDIS_URL=redis://redis:6379/0
-      - WORKER_QUEUES=parse,index,llm,default
-      - LOG_LEVEL=INFO
-      - OCR_LANG=vie+eng
-      - OCR_DPI=300
-      - OCR_PSM=6
-      - OCR_OEM=1
-      - OCR_CROP_RATIO=0.05
-      - ANONYMIZED_TELEMETRY=False
-      - POSTHOG_DISABLED=1
-      - OTEL_SERVICE_NAME=hrm-ai-worker-legacy
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-    volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
-      - ./backend:/app/backend
-    depends_on:
-      - postgres
-      - redis
-      - ollama
-    command: ["python", "-m", "backend.worker.run_worker"]
-
-  worker_parse:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_TIMEOUT_S=60
-      - OLLAMA_RETRIES=2
-      - OLLAMA_RETRY_BACKOFF_S=1.0
-      - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
-      - REDIS_URL=redis://redis:6379/0
-      - TENANT_ID=default
-      - RATE_LIMIT_PER_MIN=120
-      - RATE_LIMIT_AUTH_BONUS=180
-      - WORKER_QUEUES=parse,default
-      - LOG_LEVEL=INFO
-      - OCR_LANG=vie+eng
-      - OCR_DPI=300
-      - OCR_PSM=6
-      - OCR_OEM=1
-      - OCR_CROP_RATIO=0.05
-      - ANONYMIZED_TELEMETRY=False
-      - POSTHOG_DISABLED=1
-      - OTEL_SERVICE_NAME=hrm-ai-worker-parse
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-    volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
-      - ./backend:/app/backend
-    depends_on:
-      - postgres
-      - redis
-      - ollama
-    command: ["python", "-m", "backend.worker.run_worker"]
-
-  worker_index:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_TIMEOUT_S=60
-      - OLLAMA_RETRIES=2
-      - OLLAMA_RETRY_BACKOFF_S=1.0
-      - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
-      - REDIS_URL=redis://redis:6379/0
-      - TENANT_ID=default
-      - RATE_LIMIT_PER_MIN=120
-      - RATE_LIMIT_AUTH_BONUS=180
-      - WORKER_QUEUES=index,default
-      - LOG_LEVEL=INFO
-      - OCR_LANG=vie+eng
-      - OCR_DPI=300
-      - OCR_PSM=6
-      - OCR_OEM=1
-      - OCR_CROP_RATIO=0.05
-      - ANONYMIZED_TELEMETRY=False
-      - POSTHOG_DISABLED=1
-      - OTEL_SERVICE_NAME=hrm-ai-worker-index
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-    volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
-      - ./backend:/app/backend
-    depends_on:
-      - postgres
-      - redis
-      - ollama
-    command: ["python", "-m", "backend.worker.run_worker"]
-
-  worker_llm:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_TIMEOUT_S=60
-      - OLLAMA_RETRIES=2
-      - OLLAMA_RETRY_BACKOFF_S=1.0
-      - DATABASE_URL=postgresql+psycopg://hrm:hrm@postgres:5432/hrm
-      - REDIS_URL=redis://redis:6379/0
-      - TENANT_ID=default
-      - RATE_LIMIT_PER_MIN=120
-      - RATE_LIMIT_AUTH_BONUS=180
-      - WORKER_QUEUES=llm,default
-      - LOG_LEVEL=INFO
-      - OCR_LANG=vie+eng
-      - OCR_DPI=300
-      - OCR_PSM=6
-      - OCR_OEM=1
-      - OCR_CROP_RATIO=0.05
-      - ANONYMIZED_TELEMETRY=False
-      - POSTHOG_DISABLED=1
-      - OTEL_SERVICE_NAME=hrm-ai-worker-llm
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-    volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
-      - ./backend:/app/backend
-    depends_on:
-      - postgres
-      - redis
-      - ollama
-    command: ["python", "-m", "backend.worker.run_worker"]
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - TENANT_ID=default
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      - ./frontend/package.json:/app/package.json
-      - ./frontend/next.config.ts:/app/next.config.ts
-      - ./frontend/tsconfig.json:/app/tsconfig.json
-    depends_on:
-      - api
-      - ollama
-    command: ["npm", "run", "dev"]
+      COLLECTOR_OTLP_ENABLED: "true"
 
 volumes:
-  ollama:
   postgres:
+  ollama:
   prometheus:
   grafana:
   loki:

@@ -26,7 +26,7 @@ import { Campaign, Candidate, ScreeningResult } from "@/types";
 export default function CVScreeningPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
-  const [newCampaignName, setNewCampaignName] = useState("Campaign 1");
+  const [newCampaignName, setNewCampaignName] = useState("Backend Developer - Tháng 7/2026");
   const [creatingCampaign, setCreatingCampaign] = useState(false);
 
   // File uploads
@@ -137,7 +137,7 @@ export default function CVScreeningPage() {
       const data = await res.json();
       await fetchCampaigns();
       setSelectedCampaignId(data.id);
-      setNewCampaignName("Campaign 1");
+      setNewCampaignName("Backend Developer - Tháng 7/2026");
     } catch (e: any) {
       alert(e.message);
     } finally {
@@ -338,7 +338,7 @@ export default function CVScreeningPage() {
   // Filters for Ranking Dashboard
   const filteredRanking = ranking.filter(row => {
     if (row.score_total < minTotalScore) return false;
-    if (!showErrors && row.parse_status !== "OK") return false;
+    if (!showErrors && row.parse_status && row.parse_status !== "OK") return false;
     return true;
   });
 
@@ -356,9 +356,9 @@ export default function CVScreeningPage() {
           <div>
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
               <Award className="w-5 h-5 text-blue-400" />
-              <span>CV Screening & Ranking</span>
+              <span>Job Opening Screening</span>
             </h1>
-            <p className="text-xs text-slate-400">Sàng lọc hồ sơ ứng viên thông minh kết hợp với AI</p>
+            <p className="text-xs text-slate-400">Mỗi đợt tuyển dụng gồm 1 JD và toàn bộ CV ứng tuyển vị trí đó</p>
           </div>
         </div>
         
@@ -377,14 +377,14 @@ export default function CVScreeningPage() {
         <section className="lg:col-span-4 space-y-6">
           {/* Campaign Select Card */}
           <div className="glass-card rounded-xl p-5 space-y-4">
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">1) Campaign</h2>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">1) Job Opening</h2>
             <div className="space-y-3">
               <select
                 value={selectedCampaignId || ""}
                 onChange={(e) => setSelectedCampaignId(Number(e.target.value) || null)}
                 className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-slate-200"
               >
-                <option value="">(Tạo mới)</option>
+                <option value="">(Tạo đợt tuyển dụng mới)</option>
                 {campaigns.map(c => (
                   <option key={c.id} value={c.id}>{c.id}: {c.name}</option>
                 ))}
@@ -396,7 +396,7 @@ export default function CVScreeningPage() {
                     type="text"
                     value={newCampaignName}
                     onChange={(e) => setNewCampaignName(e.target.value)}
-                    placeholder="Tên campaign..."
+                    placeholder="Ví dụ: Backend Developer - Tháng 7/2026"
                     className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none text-slate-200"
                   />
                   <button
@@ -404,7 +404,7 @@ export default function CVScreeningPage() {
                     disabled={creatingCampaign}
                     className="w-full text-xs py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors disabled:opacity-40"
                   >
-                    Tạo Campaign mới
+                    Tạo Job Opening mới
                   </button>
                 </div>
               )}
@@ -415,11 +415,11 @@ export default function CVScreeningPage() {
             <>
               {/* JD & CV Upload Card */}
               <div className="glass-card rounded-xl p-5 space-y-5">
-                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">2) Upload & Ingest</h2>
+                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">2) JD & Candidate CVs</h2>
                 
                 {/* JD Upload */}
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-300">Tài liệu JD tuyển dụng (PDF/TXT):</label>
+                  <label className="text-xs font-medium text-slate-300">JD cho vị trí này (1 file, upload lại sẽ thay JD cũ):</label>
                   <div className="flex gap-2">
                     <input
                       type="file"
@@ -432,14 +432,14 @@ export default function CVScreeningPage() {
                       disabled={!jdFile || uploadingJd}
                       className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs rounded-lg font-medium transition-colors disabled:opacity-40 shrink-0"
                     >
-                      {uploadingJd ? "Uploading..." : "Upload JD"}
+                      {uploadingJd ? "Uploading..." : "Upload / Replace JD"}
                     </button>
                   </div>
                 </div>
 
                 {/* CVs Upload */}
                 <div className="space-y-2 pt-3 border-t border-slate-800">
-                  <label className="text-xs font-medium text-slate-300">Tập tin CVs (Nhiều PDF):</label>
+                  <label className="text-xs font-medium text-slate-300">CV ứng tuyển vị trí này (upload nhiều file):</label>
                   <div className="flex gap-2">
                     <input
                       type="file"
@@ -461,7 +461,7 @@ export default function CVScreeningPage() {
 
               {/* Campaign settings Card */}
               <div className="glass-card rounded-xl p-5 space-y-4">
-                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">3) Campaign Settings</h2>
+                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">3) Scoring Settings</h2>
                 <div className="space-y-3 text-xs">
                   {/* Slider for wEmbed */}
                   <div className="space-y-1.5">
@@ -523,18 +523,18 @@ export default function CVScreeningPage() {
           {!selectedCampaignId ? (
             <div className="h-96 glass-card rounded-2xl flex flex-col items-center justify-center text-center max-w-md mx-auto p-6 space-y-4">
               <Sparkles className="w-12 h-12 text-blue-400 animate-pulse" />
-              <h3 className="text-lg font-bold text-white">Bắt đầu Campaign tuyển dụng</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Chọn một chiến dịch tuyển dụng ở cột bên trái hoặc chọn tạo mới để thực hiện bóc tách, xếp hạng và so khớp CV.
-              </p>
+                <h3 className="text-lg font-bold text-white">Bắt đầu một đợt tuyển dụng</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                Tạo Job Opening, upload 1 JD và các CV ứng tuyển cùng vị trí để chạy ranking.
+                </p>
             </div>
           ) : (
             <>
               {/* Screening & Action Controls */}
               <div className="glass-card rounded-xl p-5 flex flex-wrap items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <h3 className="font-bold text-white text-sm">Chạy Sàng Lọc & Xếp hạng</h3>
-                  <p className="text-xs text-slate-400">Phân tích CV và đối chiếu với cấu hình JD hiện tại</p>
+                  <h3 className="font-bold text-white text-sm">Chạy ranking cho Job Opening này</h3>
+                  <p className="text-xs text-slate-400">So khớp toàn bộ CV trong đợt tuyển dụng với JD hiện tại</p>
                 </div>
                 <div className="flex gap-3">
                   <button

@@ -26,6 +26,8 @@ class CampaignCreate(BaseModel):
 class CampaignOut(BaseModel):
     id: int
     name: str
+    tenant_id: str
+    created_at: str
 
 
 class CandidateOut(BaseModel):
@@ -35,8 +37,11 @@ class CandidateOut(BaseModel):
     error: Optional[str] = None
     parse_method: str = "unknown"
     chars: int = 0
+    parse_chars: int = 0
     quality_score: float = 0.0
     quality_reason: str = ""
+    pipeline_status: str = "Applied"
+    created_at: str | None = None
 
 
 class ReviewOut(BaseModel):
@@ -83,14 +88,22 @@ def create_campaign(payload: CampaignCreate, session: SessionDep) -> CampaignOut
     session.add(campaign)
     session.commit()
     session.refresh(campaign)
-    return CampaignOut(id=campaign.id, name=campaign.name)
+    return CampaignOut(
+        id=campaign.id,
+        name=campaign.name,
+        tenant_id=campaign.tenant_id,
+        created_at=campaign.created_at.isoformat(),
+    )
 
 
 @router.get("", response_model=List[CampaignOut])
 def list_campaigns(session: SessionDep) -> List[CampaignOut]:
     tenant_id = current_tenant_id()
     rows = session.query(models.Campaign).filter(models.Campaign.tenant_id == tenant_id).order_by(models.Campaign.id.desc()).all()
-    return [CampaignOut(id=r.id, name=r.name) for r in rows]
+    return [
+        CampaignOut(id=r.id, name=r.name, tenant_id=r.tenant_id, created_at=r.created_at.isoformat())
+        for r in rows
+    ]
 
 
 @router.get("/{campaign_id}", response_model=CampaignOut)
@@ -99,7 +112,12 @@ def get_campaign(campaign_id: int, session: SessionDep) -> CampaignOut:
     campaign = session.get(models.Campaign, campaign_id)
     if campaign is None or campaign.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    return CampaignOut(id=campaign.id, name=campaign.name)
+    return CampaignOut(
+        id=campaign.id,
+        name=campaign.name,
+        tenant_id=campaign.tenant_id,
+        created_at=campaign.created_at.isoformat(),
+    )
 
 
 @router.get("/{campaign_id}/settings", response_model=CampaignSettingsOut)
@@ -261,7 +279,7 @@ async def upload_cvs(campaign_id: int, session: SessionDep, files: List[UploadFi
 
     session.commit()
 
-    job_id = enqueue_job("parse_cvs", {"campaign_id": campaign_id})
+    job_id = enqueue_job("parse_cvs", {"campaign_id": campaign_id, "candidate_ids": created})
     return {"ok": True, "candidate_ids": created, "job_id": job_id}
 
 
@@ -281,9 +299,12 @@ def list_candidates(campaign_id: int, session: SessionDep) -> List[CandidateOut]
             parse_status=r.parse_status,
             error=r.error,
             parse_method=getattr(r, "parse_method", "unknown") or "unknown",
-            chars=len((r.text or "").strip()),
+            chars=int(getattr(r, "parse_chars", 0) or len((r.text or "").strip())),
+            parse_chars=int(getattr(r, "parse_chars", 0) or len((r.text or "").strip())),
             quality_score=float(getattr(r, "quality_score", 0.0) or 0.0),
             quality_reason=str(getattr(r, "quality_reason", "") or ""),
+            pipeline_status=str(getattr(r, "pipeline_status", "Applied") or "Applied"),
+            created_at=r.created_at.isoformat() if getattr(r, "created_at", None) else None,
         )
         for r in rows
     ]
@@ -304,8 +325,10 @@ def start_screening(campaign_id: int, session: SessionDep) -> dict:
 def get_ranking(campaign_id: int, session: SessionDep) -> dict:
     tenant_id = current_tenant_id()
     rows = (
-        session.query(models.ScreeningResult)
+        session.query(models.ScreeningResult, models.Candidate)
+        .join(models.Candidate, models.Candidate.id == models.ScreeningResult.candidate_id)
         .filter(models.ScreeningResult.campaign_id == campaign_id, models.ScreeningResult.tenant_id == tenant_id)
+        .filter(models.Candidate.tenant_id == tenant_id)
         .order_by(models.ScreeningResult.score_total.desc(), models.ScreeningResult.score_embed.desc())
         .all()
     )
@@ -314,15 +337,22 @@ def get_ranking(campaign_id: int, session: SessionDep) -> dict:
         "campaign_id": campaign_id,
         "results": [
             {
-                "candidate_id": r.candidate_id,
-                "score_total": float(getattr(r, "score_total", 0.0) or 0.0),
-                "score_embed": float(r.score_embed),
-                "score_rules": float(getattr(r, "score_rules", 0.0) or 0.0),
-                "notes": r.notes,
-                "evidence": json.loads(getattr(r, "evidence_json", "[]") or "[]"),
-                "rules": json.loads(getattr(r, "rules_json", "{}") or "{}"),
+                "candidate_id": result.candidate_id,
+                "filename": candidate.filename,
+                "pipeline_status": candidate.pipeline_status,
+                "parse_status": candidate.parse_status,
+                "parse_method": candidate.parse_method,
+                "quality_score": float(getattr(candidate, "quality_score", 0.0) or 0.0),
+                "quality_reason": str(getattr(candidate, "quality_reason", "") or ""),
+                "error": candidate.error,
+                "score_total": float(getattr(result, "score_total", 0.0) or 0.0),
+                "score_embed": float(result.score_embed),
+                "score_rules": float(getattr(result, "score_rules", 0.0) or 0.0),
+                "notes": result.notes,
+                "evidence": json.loads(getattr(result, "evidence_json", "[]") or "[]"),
+                "rules": json.loads(getattr(result, "rules_json", "{}") or "{}"),
             }
-            for r in rows
+            for result, candidate in rows
         ],
     }
 
