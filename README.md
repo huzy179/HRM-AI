@@ -11,12 +11,7 @@ Repo này là một hệ thống HRM AI theo kiến trúc **API + Worker + UI**:
 Yêu cầu: Docker Desktop.
 
 ```bash
-docker compose up --build
-docker compose exec api alembic upgrade head
-
-# lần đầu: pull models
-docker compose exec ollama ollama pull nomic-embed-text
-docker compose exec ollama ollama pull llama3
+make setup
 ```
 
 - Next.js UI: `http://localhost:3000`
@@ -29,8 +24,8 @@ docker compose exec ollama ollama pull llama3
 
 ## Tài liệu quan trọng
 
-- `CURRENT_STACK_AND_FLOWS.md`: stack + endpoints + flows hiện tại
-- `PHASE_6_RUNBOOK.md`: auth/rate-limit/audit/metrics
+- `CURRENT_STACK_AND_FLOWS.md`: stack hiện tại, mục đích từng thành phần và flow sử dụng
+- `Makefile`: các lệnh vận hành local thường dùng
 
 ## Cấu hình (env vars)
 
@@ -47,7 +42,7 @@ Mặc định nên chạy tách queue:
 Service `worker` (all-in-one) chỉ dùng khi bật profile legacy:
 
 ```bash
-docker compose --profile legacy up --build worker
+make legacy-worker
 ```
 
 ## Monitoring / Observability

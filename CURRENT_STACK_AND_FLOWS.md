@@ -1,307 +1,258 @@
-# HRM AI — Current stack & flows (2026-05-25)
+# HRM AI - Current Stack And Flows
 
-Tài liệu này tóm tắt **toàn bộ công nghệ** và **luồng chạy hiện tại** của repo theo kiến trúc **API + Worker + UI**:
+Tài liệu này mô tả dự án đang dùng những công nghệ gì, dùng để làm gì, và luồng nghiệp vụ hiện tại vận hành như thế nào. Không đi vào chi tiết code.
 
-- CV screening: upload JD/CVs → parse/OCR → index (Chroma) → rank (embeddings + rules) → review (LLM) → trích xuất profile
-- Policy chatbot (RAG): ingest tài liệu → chat có citations
-- Offline-first: chạy local LLM qua **Ollama**
+## 1. Mục Tiêu Sản Phẩm
 
----
+HRM AI là hệ thống hỗ trợ tuyển dụng và tra cứu tài liệu nội bộ bằng AI.
 
-## 0) Quick start (Docker)
+Hệ thống hiện có 2 nhóm chức năng chính:
 
-Yêu cầu: Docker Desktop.
+- **CV Screening**: tạo campaign tuyển dụng, upload JD và CV ứng viên, sau đó hệ thống parse tài liệu, chấm điểm phù hợp, xếp hạng ứng viên và tạo review bằng LLM.
+- **Policy Chatbot**: upload tài liệu/chính sách nội bộ, index vào vector database, sau đó chat với tài liệu và nhận câu trả lời có citation.
+
+## 2. Stack Đang Dùng
+
+### Frontend
+
+- **Next.js + React + TypeScript**: xây giao diện web.
+- **Tailwind CSS**: styling UI.
+- **Lucide React**: icon trong giao diện.
+
+Mục đích: cung cấp màn hình thao tác cho người dùng, gồm CV screening, policy chat, upload tài liệu và xem kết quả.
+
+### Backend API
+
+- **FastAPI**: cung cấp REST API cho frontend.
+- **Uvicorn**: chạy server FastAPI.
+- **Pydantic**: validate dữ liệu request/response.
+
+Mục đích: nhận upload, tạo campaign, điều phối job, trả trạng thái xử lý, expose kết quả ranking/review/chat.
+
+### Database
+
+- **PostgreSQL**: database chính khi chạy Docker.
+- **SQLAlchemy**: ORM để backend làm việc với database.
+- **Alembic**: migration schema.
+- **SQLite**: dùng chủ yếu cho test/local lightweight.
+
+Mục đích: lưu campaign, JD, CV, ứng viên, kết quả screening, review, job status, audit log và policy document metadata.
+
+### Queue Và Worker
+
+- **Redis**: message broker cho hàng đợi.
+- **RQ**: queue/job runner.
+- **worker_parse**: xử lý parse/OCR JD và CV.
+- **worker_index**: xử lý indexing, ranking, policy ingest, rebuild index, cleanup.
+- **worker_llm**: xử lý các tác vụ gọi LLM như review ứng viên.
+
+Mục đích: tách các tác vụ nặng hoặc chậm ra khỏi API để UI không bị treo khi upload nhiều CV, OCR, embedding hoặc gọi LLM.
+
+### Local LLM
+
+- **Ollama**: chạy model local/offline.
+- **nomic-embed-text**: embedding model cho RAG/ranking.
+- **llama3**: chat/review model mặc định.
+
+Mục đích: giảm phụ thuộc cloud API, hỗ trợ chạy local, dùng cho embedding, RAG, review ứng viên và sinh nội dung tự động.
+
+### Vector Database Và RAG
+
+- **ChromaDB**: lưu vector embeddings.
+- **LangChain Ollama integration**: kết nối Ollama với embedding/chat model.
+- **LangChain Chroma integration**: kết nối backend với Chroma.
+
+Mục đích: tìm kiếm ngữ nghĩa trên CV/JD/policy document, phục vụ ranking ứng viên và policy chatbot có citation.
+
+### Document Processing
+
+- **PyMuPDF**: đọc text từ PDF.
+- **pdfplumber**: fallback khi PDF text extraction chưa tốt.
+- **Tesseract + pytesseract**: OCR cho PDF scan hoặc file không có text layer.
+- **python-docx**: đọc DOCX.
+
+Mục đích: chuyển JD, CV và policy document thành text sạch để dùng cho ranking, RAG và review.
+
+### Observability
+
+- **Prometheus**: scrape metrics từ backend.
+- **Grafana**: dashboard quan sát hệ thống.
+- **Loki + Promtail**: thu thập và xem log container.
+- **Jaeger + OpenTelemetry**: trace request và luồng xử lý.
+
+Mục đích: theo dõi health, request latency, metrics của job/RAG, log hệ thống và trace khi debug.
+
+### Evaluation
+
+- **Ragas**: đánh giá chất lượng Policy RAG.
+
+Mục đích: đo faithfulness, context precision/recall và answer relevancy cho chatbot tài liệu.
+
+### Runtime Và Dev Tooling
+
+- **Docker Compose**: chạy full stack local.
+- **Makefile**: gom lệnh vận hành thường dùng.
+- **pytest**: test backend/API/worker logic.
+
+Mục đích: giúp setup, chạy, test và debug dự án nhất quán hơn.
+
+## 3. Docker Services Hiện Tại
+
+- **frontend**: web UI tại `http://localhost:3000`.
+- **api**: FastAPI tại `http://localhost:8000`.
+- **postgres**: database tại port `5432`.
+- **redis**: queue backend tại port `6379`.
+- **ollama**: local model server tại port `11434`.
+- **worker_parse**: worker cho parse/OCR.
+- **worker_index**: worker cho index/ranking/RAG ingest.
+- **worker_llm**: worker cho LLM review.
+- **prometheus**: metrics tại `http://localhost:9090`.
+- **grafana**: dashboard tại `http://localhost:3001`.
+- **loki**: log store tại `http://localhost:3100`.
+- **promtail**: đẩy container logs sang Loki.
+- **jaeger**: trace UI tại `http://localhost:16686`.
+
+Service **worker** legacy vẫn còn trong compose profile `legacy`, dùng khi muốn chạy một worker all-in-one thay vì 3 worker tách riêng.
+
+## 4. Cách Chạy Khuyến Nghị
+
+Chạy lần đầu:
 
 ```bash
-docker compose up -d --build
-docker compose exec api alembic upgrade head
-
-# Lần đầu: pull models
-docker compose exec ollama ollama pull nomic-embed-text
-docker compose exec ollama ollama pull llama3
+make setup
 ```
 
-- Next.js UI: `http://localhost:3000`
+Chạy lại stack:
+
+```bash
+make up
+```
+
+Xem log app chính:
+
+```bash
+make logs
+```
+
+Kiểm tra health:
+
+```bash
+make health
+```
+
+Pull lại model Ollama:
+
+```bash
+make models
+```
+
+Xem danh sách URL:
+
+```bash
+make urls
+```
+
+## 5. Flow CV Screening
+
+Mục tiêu: tuyển dụng theo từng campaign/vị trí.
+
+Ví dụ:
+
+- Campaign: `Backend Developer - Tháng 7/2026`
+- JD: `backend_developer_jd.pdf`
+- CVs: toàn bộ CV ứng tuyển vị trí Backend Developer
+
+Luồng sử dụng:
+
+1. Người dùng tạo campaign tuyển dụng.
+2. Upload JD cho campaign đó.
+3. Upload nhiều CV ứng viên vào cùng campaign.
+4. Worker parse/OCR chuyển JD và CV thành text.
+5. Worker index/ranking tạo embeddings và so sánh JD với CV.
+6. Hệ thống trả bảng ranking ứng viên.
+7. Người dùng có thể yêu cầu LLM review từng ứng viên.
+8. Kết quả cuối gồm điểm match, evidence/citation, nhận xét, strengths/gaps và trạng thái pipeline.
+
+Ý nghĩa:
+
+- Campaign là “ngữ cảnh tuyển dụng”.
+- JD là yêu cầu của vị trí.
+- CVs là tập ứng viên cho vị trí đó.
+- Ranking giúp lọc nhanh.
+- LLM review giúp có nhận xét đọc được bởi recruiter/hiring manager.
+
+## 6. Flow Policy Chatbot
+
+Mục tiêu: chat với tài liệu/chính sách nội bộ.
+
+Luồng sử dụng:
+
+1. Người dùng upload tài liệu policy, ví dụ quy chế nghỉ phép, bảo hiểm, onboarding, handbook.
+2. Worker parse tài liệu thành text.
+3. Worker index text vào ChromaDB.
+4. Người dùng đặt câu hỏi trong màn Policy Chat.
+5. Backend retrieve các đoạn liên quan từ vector database.
+6. LLM trả lời dựa trên context tìm được.
+7. UI hiển thị câu trả lời kèm citations.
+
+Lưu ý vận hành:
+
+- Nếu chưa upload tài liệu hoặc tài liệu chưa ingest xong, chatbot không có ngữ cảnh để trả lời.
+- Cần có model `nomic-embed-text` cho retrieval.
+- Cần có model `llama3` hoặc model chat tương đương cho phần trả lời.
+
+## 7. Flow Observability
+
+Mục tiêu: biết hệ thống có đang chạy ổn không và lỗi nằm ở đâu.
+
+Luồng sử dụng:
+
+1. API expose metrics tại `/metrics/prometheus`.
+2. Prometheus scrape metrics định kỳ.
+3. Grafana đọc Prometheus/Loki/Jaeger để hiển thị dashboard.
+4. Promtail gom log container và gửi sang Loki.
+5. OpenTelemetry gửi traces sang Jaeger.
+
+Nên dùng khi:
+
+- API chậm hoặc lỗi.
+- Worker không xử lý job.
+- RAG trả lời chậm hoặc không có citation.
+- Cần xem log theo service.
+- Cần trace request qua API/DB/LLM.
+
+## 8. Flow Evaluation
+
+Mục tiêu: đánh giá chất lượng RAG thay vì chỉ nhìn cảm tính.
+
+Luồng sử dụng:
+
+1. Chuẩn bị bộ câu hỏi đánh giá trong `evals/policy_eval_questions.jsonl`.
+2. Chạy Ragas eval.
+3. Xem kết quả về answer relevancy, context precision, context recall và faithfulness.
+
+Chạy:
+
+```bash
+make ragas-venv
+make ragas
+```
+
+## 9. Các URL Chính
+
+- Frontend: `http://localhost:3000`
 - API docs: `http://localhost:8000/docs`
 - API health: `http://localhost:8000/health`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3001` (`admin` / `admin`)
+- Loki: `http://localhost:3100`
+- Jaeger: `http://localhost:16686`
 
----
+## 10. Ghi Chú Hiện Trạng
 
-## 1) Tech stack
-
-### 1.1 Runtime & packaging
-- Python 3.10+
-- Node.js 20+ (Next.js Frontend)
-- Docker / Docker Compose (khuyến nghị để chạy đủ stack)
-- `.venv` (dev local)
-
-### 1.2 Backend / API
-- FastAPI + Uvicorn
-- Pydantic models (request/response)
-- Upload handling: `python-multipart`
-- Middleware (Phase 6): auth (API key), rate limit, audit log
-
-### 1.3 Database & migrations
-- SQLAlchemy 2
-- Alembic migrations
-- Postgres (Docker) cho stack đầy đủ
-- SQLite dùng cho tests (contract tests)
-
-### 1.4 Queue / Worker
-- Redis
-- RQ (Redis Queue)
-- Worker processes lắng nghe nhiều queue bằng env `WORKER_QUEUES`
-- Job status persisted ở DB table `jobs`
-- Retry safety: chỉ retry khi job `FAILED/DONE` (không retry `RUNNING`), chặn retry job chưa “idempotent” nếu chưa có guard (có thể `force=true`).
-- Lưu ý RQ: `Queue.enqueue()` có keyword arg reserved `job_id` (để set RQ job id) → DB job id được pass vào job function bằng positional arg, và RQ job id được set trùng DB job id để dùng chung.
-
-### 1.5 AI / RAG
-- Ollama (local)
-- Embeddings: `nomic-embed-text`
-- Chat/review: `llama3` (hoặc model khác qua env)
-- LangChain integrations:
-  - `langchain-ollama`
-  - `langchain-chroma`
-- Vector DB: ChromaDB (persist dưới `./data/chroma_db`)
-
-### 1.6 Document processing / OCR
-- PDF text extraction: PyMuPDF (`fitz`) + fallback `pdfplumber`
-- OCR fallback: Tesseract + `pytesseract`
-- OCR tunables qua env: `OCR_LANG`, `OCR_DPI`, `OCR_PSM`, `OCR_OEM`, `OCR_CROP_RATIO`
-- OCR quality gate (heuristic) để chặn text OCR “rác”
-
-### 1.7 Frontend
-- Next.js (App Router, TypeScript, Tailwind CSS)
-- Cổng kết nối phát triển mặc định: `3000`
-
-### 1.8 Testing
-- pytest
-- requests
-- fastapi TestClient (API contract tests)
-
----
-
-## 2) Docker Compose services
-
-### 2.1 Core services
-- `ollama` (port `11434`): embeddings + chat
-- `postgres` (port `5432`): DB
-- `redis` (port `6379`): queue backend + (Phase 6) rate limit counters
-- `api` (port `8000`): FastAPI
-- `frontend` (port `3000`): Next.js
-
-### 2.2 Workers (queue split)
-- `worker_parse`: nghe `parse,default`
-- `worker_index`: nghe `index,default`
-- `worker_llm`: nghe `llm,default`
-- `worker` (legacy/all-in-one): nằm trong profile `legacy` để tránh chạy trùng
-  - chạy khi cần: `docker compose --profile legacy up --build worker`
-
----
-
-## 3) Queue mapping (job_type → queue)
-
-- Queue `parse`
-  - `parse_jd` (parse/OCR JD)
-  - `parse_cvs` (parse/OCR CVs)
-- Queue `index`
-  - `screen_campaign` (index + rank)
-  - `policy_ingest` (ingest policy docs)
-  - `extract_profile` (extract CandidateProfile từ text)
-  - `cleanup_storage` (tenant cleanup uploads/chroma)
-  - `policy_clear`, `policy_rebuild`
-- Queue `llm`
-  - `review_candidate` (LLM review theo evidence chunks)
-- Fallback queue `default`
-  - job type không match mapping
-
----
-
-## 4) Environment variables (quan trọng)
-
-### 4.1 API / Worker / Frontend chung
-- `DATABASE_URL`
-  - Docker: `postgresql+psycopg://hrm:hrm@postgres:5432/hrm`
-- `REDIS_URL`
-  - Docker: `redis://redis:6379/0`
-
-### 4.2 Ollama reliability
-- `OLLAMA_BASE_URL` (Docker: `http://ollama:11434`)
-- `OLLAMA_CHAT_MODEL` (default `llama3`)
-- `OLLAMA_TIMEOUT_S` (default `60`)
-- `OLLAMA_RETRIES` (default `2`)
-- `OLLAMA_RETRY_BACKOFF_S` (default `1.0`)
-
-### 4.3 OCR
-- `OCR_LANG` (default `eng`, Docker thường set `vie+eng`)
-- `OCR_DPI` (default `300`)
-- `OCR_PSM` (default `6`)
-- `OCR_OEM` (default `1`)
-- `OCR_CROP_RATIO` (default `0.05`)
-- (Windows local) `TESSERACT_CMD` (đường dẫn `tesseract.exe` nếu cần)
-
-### 4.4 Upload limits (API protection)
-- `MAX_UPLOAD_BYTES` (default `20MB`)
-- `MAX_UPLOAD_FILES` (default `50`)
-Ghi chú:
-- Upload được ghi **streaming** xuống disk và enforce limit theo byte (không load toàn bộ vào RAM).
-
-### 4.5 Worker runtime
-- `WORKER_QUEUES` (ví dụ `parse,index,llm,default`)
-- `LOG_LEVEL` (default `INFO`)
-
-### 4.6 Phase 6: Auth + rate limit
-- `HRM_API_KEYS` (comma-separated) hoặc `HRM_API_KEY` (single)
-- `HRM_ADMIN_API_KEYS` hoặc `HRM_ADMIN_API_KEY` (admin-only endpoints)
-- `RATE_LIMIT_PER_MIN` (default `120`)
-- `RATE_LIMIT_AUTH_BONUS` (default `180`)
-- Frontend: `API_KEY` để tự gửi header `X-API-Key`
-
-### 4.7 Tenant + retention
-- `TENANT_ID` (default `default`): namespace cho Chroma + DB scoping
-- `AUDIT_RETENTION_DAYS` (default `30`): dùng bởi `POST /audit/purge`
-
----
-
-## 5) Data model (DB tables) — high level
-
-- `campaigns` (`tenant_id`)
-- `campaign_settings` (`tenant_id`, `w_embed`, `required_skills_json`, `min_years_override`)
-- `job_descriptions` (`tenant_id`, `text`, `parse_status`, `parse_method`, `error`)
-- `candidates` (`tenant_id`, `text`, `parse_status`, `parse_method`, `error`, `parse_chars`, `quality_score`, `quality_reason`)
-- `candidate_profiles` (`tenant_id`, …)
-- `screening_results` (`tenant_id`, `score_embed`, `score_rules`, `score_total`, `evidence_json`, `rules_json`, `run_hash`)
-- `review_results` (`tenant_id`, `score_llm`, `summary`, `strengths_json`, `gaps_json`, `evidence_json`)
-- `policy_documents` (`tenant_id`, `text`, `ingest_status`, `ingest_method`, `error`)
-- `jobs` (`tenant_id`, `status`, `progress`, `error`, `result_json`, `payload_json`, `attempt`, `parent_job_id`, `started_at`, `finished_at`, `duration_ms`)
-- `audit_events` (`tenant_id`, `ts`, `subject`, `ip`, `method`, `path`, `status_code`, `duration_ms`, `request_id`)
-
----
-
-## 6) API endpoints (hiện có)
-
-### 6.1 Health (public)
-- `GET /health`
-
-### 6.2 Campaigns
-- `POST /campaigns`
-- `GET /campaigns`
-- `GET /campaigns/{campaign_id}`
-
-### 6.3 Campaign settings
-- `GET /campaigns/{campaign_id}/settings` (auto-create default row)
-- `PUT /campaigns/{campaign_id}/settings`
-- `GET /campaigns/{campaign_id}/requirements`
-
-### 6.4 JD / CVs
-- `POST /campaigns/{campaign_id}/jd` (upload → enqueue `parse_jd`)
-- `POST /campaigns/{campaign_id}/cvs` (upload multi → enqueue `parse_cvs`)
-- `GET /campaigns/{campaign_id}/candidates`
-
-### 6.5 Screening
-- `POST /campaigns/{campaign_id}/screen` (enqueue `screen_campaign`)
-- `GET /campaigns/{campaign_id}/ranking`
-
-### 6.6 Review (LLM)
-- `POST /campaigns/{campaign_id}/candidates/{candidate_id}/review` (enqueue `review_candidate`)
-- `GET /campaigns/{campaign_id}/candidates/{candidate_id}/review`
-
-### 6.7 Candidate profile
-- `POST /campaigns/{campaign_id}/candidates/{candidate_id}/profile` (enqueue `extract_profile`)
-- `GET /campaigns/{campaign_id}/candidates/{candidate_id}/profile`
-
-### 6.8 Jobs
-- `GET /jobs/{job_id}`
-- `GET /jobs?limit=50` (tenant-scoped)
-- `POST /jobs/{job_id}/retry?confirm=true` (admin key)
-  - chỉ retry khi `FAILED/DONE`
-  - chặn job_type chưa “idempotent” nếu chưa được allowlist (có thể `force=true`)
-
-### 6.9 Policy RAG
-- `POST /policy/ingest` (upload → enqueue `policy_ingest`)
-- `GET /policy/documents`
-- `POST /policy/chat`
-- `POST /policy/clear?confirm=true` (admin key)
-- `POST /policy/rebuild?confirm=true` (admin key)
-
-### 6.10 Audit (Phase 6)
-- `GET /audit/events` (admin key)
-- `POST /audit/purge?confirm=true` (admin key)
-
-### 6.11 Metrics
-- `GET /metrics/summary?minutes=60`
-
-### 6.12 Admin (Queue backlog & worker health)
-- `GET /admin/queues` (admin key, Redis required)
-- `GET /admin/workers` (admin key, Redis required)
-- `POST /admin/cleanup?confirm=true&dry_run=true` (admin key, enqueue `cleanup_storage`)
-
----
-
-## 7) End-to-end flows (chi tiết)
-
-### 7.1 Campaign & JD parse/OCR
-1) `POST /campaigns` → tạo campaign
-2) `POST /campaigns/{id}/jd` → lưu file vào `uploads/tenant_<TENANT_ID>/campaign_<id>/jd/`, upsert `job_descriptions` (status `PENDING`)
-3) Enqueue job `parse_jd` (queue `parse`)
-4) Worker `parse_jd`:
-   - Parse text: PyMuPDF → fallback pdfplumber → fallback OCR (Tesseract)
-   - OCR quality gate: nếu text kém → `parse_status=ERROR`, `error=OCR_LOW_QUALITY:<reason>`
-   - Save: `text/parse_status/parse_method/error`
-
-### 7.2 CV upload + parse/OCR + quality metrics
-1) `POST /campaigns/{id}/cvs` → lưu files vào `uploads/tenant_<TENANT_ID>/campaign_<id>/cvs/`, insert `candidates`
-2) Enqueue job `parse_cvs` (queue `parse`)
-3) Worker `parse_cvs`:
-   - Idempotency: nếu candidate đã `OK` + có text → skip
-   - Save parse fields + metrics: `parse_chars`, và nếu OCR thì set `quality_score/quality_reason`
-   - Nếu OCR quality fail → set `parse_status=ERROR`, `error=OCR_LOW_QUALITY:<reason>`, xoá `text` để tránh rank/review
-
-### 7.3 CandidateProfile extraction (rule-based)
-1) `POST /campaigns/{id}/candidates/{candidate_id}/profile` → enqueue `extract_profile` (queue `index`)
-2) Worker `extract_profile` → upsert `candidate_profiles`
-3) `GET /campaigns/{id}/candidates/{candidate_id}/profile` → xem profile
-
-### 7.4 Screening: index + composite rank
-1) (optional) `PUT /campaigns/{id}/settings` để cấu hình `w_embed` + overrides
-2) `POST /campaigns/{id}/screen` → enqueue `screen_campaign` (queue `index`)
-3) Worker `screen_campaign`:
-   - Validate JD (`JD_NOT_READY` nếu chưa OK)
-   - Lọc candidates `parse_status == OK`
-   - Index CV chunks vào Chroma theo campaign + tenant
-     - Chroma path namespace: `./data/chroma_db/cv_screening/tenant_<TENANT_ID>/campaign_<id>/...`
-   - Embedding rank → `score_embed`
-   - Rule score (skills + years) từ `candidate_profiles` + override từ `campaign_settings` → `score_rules`
-   - Combine: `score_total = w_embed*score_embed + (1-w_embed)*score_rules`
-   - Save `screening_results` + `run_hash` (sha256) để idempotency
-4) `GET /campaigns/{id}/ranking` → UI hiển thị bảng + drill-down evidence/rules
-
-### 7.5 LLM Review (llama3) theo evidence chunks
-1) `POST /campaigns/{id}/candidates/{candidate_id}/review` → enqueue `review_candidate` (queue `llm`)
-2) Worker `review_candidate`:
-   - Retrieve evidence chunks (top-N) từ Chroma
-   - Call Ollama (format JSON) + retry/timeout wrapper
-   - Save `review_results`
-   - Idempotency: nếu đã có `review_results.summary` → skip
-3) `GET /campaigns/{id}/candidates/{candidate_id}/review` → UI hiển thị
-
-### 7.6 Policy RAG (ingest + chat)
-1) `POST /policy/ingest` → lưu file vào `uploads/tenant_<TENANT_ID>/policy/`, insert `policy_documents`
-2) Enqueue `policy_ingest` (queue `index`)
-3) Worker `policy_ingest`:
-   - Parse/OCR + quality gate
-   - Chunk + index vào Chroma policy collection (tenant-scoped)
-4) `POST /policy/chat`:
-   - Retrieve top-k citations
-   - Nếu không có citations → trả `"Không tìm thấy trong tài liệu"` (không gọi LLM)
-   - Nếu có citations → call Ollama để sinh answer + trả citations
-
----
-
-## 8) Streamlit pages (hiện có)
-
-- `frontend/pages/0_Phase2_API.py`: API demo đơn giản
-- `frontend/pages/2_CV_Screening_API.py`: CV screening (settings, parse/quality, ranking, review, profile)
-- `frontend/pages/9_Policy_Chat_API.py`: policy ingest + chat (RAG)
-- `frontend/pages/8_Admin_API.py`: admin (audit/events, purge, metrics/summary, policy docs, policy clear/rebuild, queues/workers)
-
+- Kiến trúc hiện tại phù hợp cho local development, demo và prototype AI workflow.
+- Docker Compose đang là đường chạy chính.
+- Worker đã được tách theo nhóm trách nhiệm để dễ debug và scale từng phần.
+- Policy chatbot là RAG theo tài liệu, không phải general chatbot.
+- CV screening đang đi theo mô hình campaign-based: một campaign tương ứng một vị trí tuyển dụng hoặc một đợt tuyển.
+- Observability đã có nền tảng cơ bản, nhưng dashboard/alert/SLO có thể tiếp tục hoàn thiện sau.
