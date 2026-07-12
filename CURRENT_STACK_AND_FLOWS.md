@@ -10,6 +10,7 @@ Hệ thống hiện có 2 nhóm chức năng chính:
 
 - **CV Screening**: tạo campaign tuyển dụng, upload JD và CV ứng viên, sau đó hệ thống parse tài liệu, chấm điểm phù hợp, xếp hạng ứng viên và tạo review bằng LLM.
 - **Policy Chatbot**: upload tài liệu/chính sách nội bộ, index vào vector database, sau đó chat với tài liệu và nhận câu trả lời có citation.
+- **Knowledge Base Admin**: khu vực admin/HR upload và quản trị tài liệu nội bộ cho chatbot.
 
 ## 2. Stack Đang Dùng
 
@@ -122,6 +123,11 @@ Chạy lần đầu:
 make setup
 ```
 
+User test local:
+
+- `admin / admin123`
+- `employee / user123`
+
 Chạy lại stack:
 
 ```bash
@@ -187,13 +193,15 @@ Mục tiêu: chat với tài liệu/chính sách nội bộ.
 
 Luồng sử dụng:
 
-1. Người dùng upload tài liệu policy, ví dụ quy chế nghỉ phép, bảo hiểm, onboarding, handbook.
-2. Worker parse tài liệu thành text.
-3. Worker index text vào ChromaDB.
-4. Người dùng đặt câu hỏi trong màn Policy Chat.
-5. Backend retrieve các đoạn liên quan từ vector database.
-6. LLM trả lời dựa trên context tìm được.
-7. UI hiển thị câu trả lời kèm citations.
+1. Admin/HR vào `http://localhost:3000/admin/knowledge-base`.
+2. Admin upload tài liệu policy, ví dụ quy chế nghỉ phép, bảo hiểm, onboarding, handbook.
+3. Worker parse tài liệu thành text.
+4. Worker index text vào ChromaDB.
+5. Employee vào `http://localhost:3000/policy-chat`.
+6. Employee đặt câu hỏi như một chatbot thông thường.
+7. Backend retrieve các đoạn liên quan từ vector database.
+8. LLM trả lời dựa trên context tìm được.
+9. UI hiển thị câu trả lời kèm citations và nút feedback.
 
 Lưu ý vận hành:
 

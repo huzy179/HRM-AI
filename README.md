@@ -15,6 +15,8 @@ make setup
 ```
 
 - Next.js UI: `http://localhost:3000`
+- Policy Chatbot: `http://localhost:3000/policy-chat`
+- Knowledge Base Admin: `http://localhost:3000/admin/knowledge-base`
 - API docs: `http://localhost:8000/docs`
 - API health: `http://localhost:8000/health`
 - Prometheus: `http://localhost:9090`
@@ -26,6 +28,19 @@ make setup
 
 - `CURRENT_STACK_AND_FLOWS.md`: stack hiện tại, mục đích từng thành phần và flow sử dụng
 - `Makefile`: các lệnh vận hành local thường dùng
+
+## User test local
+
+```text
+admin / admin123
+employee / user123
+```
+
+Tạo/cập nhật lại user test:
+
+```bash
+make seed-users
+```
 
 ## Cấu hình (env vars)
 

@@ -53,8 +53,12 @@ models: ## Pull required Ollama models
 	$(COMPOSE) exec ollama ollama pull $(OLLAMA_EMBED_MODEL)
 	$(COMPOSE) exec ollama ollama pull $(OLLAMA_CHAT_MODEL)
 
+.PHONY: seed-users
+seed-users: ## Create/update local test users in the API container
+	$(COMPOSE) exec api env PYTHONPATH=. python scripts/seed_test_users.py
+
 .PHONY: setup
-setup: up migrate models ## Start stack, migrate DB, and pull Ollama models
+setup: up migrate models seed-users ## Start stack, migrate DB, pull Ollama models, and seed test users
 
 .PHONY: health
 health: ## Check API health

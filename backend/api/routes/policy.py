@@ -4,7 +4,7 @@ from pathlib import Path
 import time
 from typing import List
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from backend.db.session import SessionDep
@@ -37,11 +37,24 @@ class PolicyChatOut(BaseModel):
     answer: str
     citations: list[dict]
 
+
+class PolicyFeedbackIn(BaseModel):
+    message_id: int | None = None
+    query: str = ""
+    answer: str = ""
+    rating: str
+    comment: str = ""
+
+
 class PolicyDocumentOut(BaseModel):
     id: int
     filename: str
     ingest_status: str
     ingest_method: str
+    category: str
+    visibility: str
+    version: str
+    status: str
     error: str | None = None
 
 
@@ -66,7 +79,16 @@ def _no_policy_docs_message(doc_ids: list[str] | None = None) -> str:
 
 
 @router.post("/ingest")
-async def ingest_policy(session: SessionDep, files: List[UploadFile] = File(...)) -> dict:
+async def ingest_policy(
+    request: Request,
+    session: SessionDep,
+    files: List[UploadFile] = File(...),
+    category: str = Form("general"),
+    visibility: str = Form("employee"),
+    version: str = Form("1.0"),
+    status: str = Form("published"),
+) -> dict:
+    require_admin(request)
     tenant_id = current_tenant_id()
     uploads_dir = Path("uploads") / f"tenant_{tenant_id}" / "policy"
     uploads_dir.mkdir(parents=True, exist_ok=True)
@@ -76,7 +98,16 @@ async def ingest_policy(session: SessionDep, files: List[UploadFile] = File(...)
     for f in files:
         dest = unique_dest(uploads_dir, f.filename)
         await save_upload_limited(f, dest)
-        doc = models.PolicyDocument(tenant_id=tenant_id, filename=f.filename, file_path=str(dest), ingest_status="PENDING")
+        doc = models.PolicyDocument(
+            tenant_id=tenant_id,
+            filename=f.filename,
+            file_path=str(dest),
+            ingest_status="PENDING",
+            category=category.strip() or "general",
+            visibility=visibility.strip() or "employee",
+            version=version.strip() or "1.0",
+            status=status.strip() or "published",
+        )
         session.add(doc)
         session.flush()
         doc_ids.append(doc.id)
@@ -103,6 +134,10 @@ def list_policy_documents(session: SessionDep, limit: int = 200) -> list[PolicyD
             filename=r.filename,
             ingest_status=r.ingest_status,
             ingest_method=getattr(r, "ingest_method", "unknown") or "unknown",
+            category=getattr(r, "category", "general") or "general",
+            visibility=getattr(r, "visibility", "employee") or "employee",
+            version=getattr(r, "version", "1.0") or "1.0",
+            status=getattr(r, "status", "draft") or "draft",
             error=r.error,
         )
         for r in rows
@@ -158,6 +193,25 @@ def chat_policy_stream(payload: PolicyChatIn, session: SessionDep) -> StreamingR
             yield f"Không thể gọi mô hình LLM/embedding. Kiểm tra Ollama model đã được pull chưa. Chi tiết: {exc}"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/feedback")
+def create_policy_feedback(payload: PolicyFeedbackIn, session: SessionDep) -> dict:
+    rating = payload.rating.strip().lower()
+    if rating not in {"up", "down", "neutral"}:
+        raise HTTPException(status_code=400, detail="rating must be up, down, or neutral")
+
+    feedback = models.ChatFeedback(
+        tenant_id=current_tenant_id(),
+        message_id=payload.message_id,
+        query=payload.query.strip(),
+        answer=payload.answer.strip(),
+        rating=rating,
+        comment=payload.comment.strip(),
+    )
+    session.add(feedback)
+    session.commit()
+    return {"ok": True, "id": feedback.id}
 
 
 @router.post("/clear")

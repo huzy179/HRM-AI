@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from backend.api.routes import campaigns, jobs, health, policy, audit, metrics, admin, automation
+from backend.api.routes import campaigns, jobs, health, policy, audit, metrics, admin, automation, auth
 from backend.api.middleware import auth_rate_limit_and_audit_middleware
 from backend.db.models import Base
 from backend.db.session import engine
@@ -30,6 +30,7 @@ def create_app() -> FastAPI:
     app.middleware("http")(auth_rate_limit_and_audit_middleware)
 
     app.include_router(health.router, tags=["health"])
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(automation.router, prefix="/automation", tags=["automation"])
     app.include_router(campaigns.router, prefix="/campaigns", tags=["campaigns"])
     app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])

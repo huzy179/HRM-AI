@@ -5,6 +5,7 @@ import {
   Users, 
   FileText, 
   MessageSquare, 
+  Shield,
   ChevronRight, 
   Sparkles, 
   TrendingUp, 
@@ -30,7 +31,7 @@ export default function Home() {
       </div>
 
       {/* Feature Cards Grid */}
-      <div className="grid md:grid-cols-2 gap-8 mb-16">
+      <div className="grid lg:grid-cols-3 gap-8 mb-16">
         {/* CV Screening Card */}
         <div className="glass-card rounded-2xl p-8 flex flex-col justify-between group">
           <div className="space-y-6">
@@ -76,7 +77,7 @@ export default function Home() {
                 HR Policy Chatbot
               </h2>
               <p className="text-slate-400 text-sm leading-relaxed">
-                Trò chuyện và tra cứu chính sách công ty tự động bằng RAG. Nhận diện tài liệu đa dạng (.pdf, .txt, .docx, .md), hỗ trợ bộ lọc và phản hồi dạng streaming.
+                Trò chuyện và tra cứu chính sách công ty tự động bằng RAG. Người dùng chỉ cần đặt câu hỏi, hệ thống trả lời dựa trên tài liệu nội bộ đã publish.
               </p>
             </div>
             <ul className="space-y-3 text-slate-400 text-sm">
@@ -86,7 +87,7 @@ export default function Home() {
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span>Source document filtering</span>
+                <span>Employee-friendly chatbot UX</span>
               </li>
             </ul>
           </div>
@@ -95,6 +96,40 @@ export default function Home() {
             className="mt-8 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-all group-hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
           >
             <span>Mở Policy Chatbot</span>
+            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </Link>
+        </div>
+
+        {/* Admin Knowledge Base Card */}
+        <div className="glass-card rounded-2xl p-8 flex flex-col justify-between group">
+          <div className="space-y-6">
+            <div className="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20 text-cyan-300 group-hover:scale-110 transition-transform">
+              <Shield className="w-6 h-6" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Knowledge Base Admin
+              </h2>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Khu vực dành cho admin/HR để upload tài liệu nội bộ, theo dõi trạng thái ingest, rebuild index và publish tri thức cho chatbot.
+              </p>
+            </div>
+            <ul className="space-y-3 text-slate-400 text-sm">
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+                <span>Admin-only document operations</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+                <span>Metadata, version, visibility</span>
+              </li>
+            </ul>
+          </div>
+          <Link
+            href="/admin/knowledge-base"
+            className="mt-8 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium transition-all group-hover:shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+          >
+            <span>Quản trị tài liệu</span>
             <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>

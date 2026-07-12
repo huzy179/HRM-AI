@@ -1,154 +1,90 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { 
-  MessageSquare, 
-  Upload, 
-  ArrowLeft, 
-  Trash2, 
-  RotateCw, 
+import {
+  ArrowLeft,
+  Bot,
+  BookOpen,
+  Check,
+  MessageSquare,
   Send,
-  FileText,
-  AlertTriangle,
-  ChevronDown,
-  BookOpen
+  ThumbsDown,
+  ThumbsUp,
+  UserRound,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { ChatMessage, PolicyDocument } from "@/types";
+import { ChatMessage } from "@/types";
+
+const suggestedPrompts = [
+  "Quy định nghỉ phép năm như thế nào?",
+  "Thử việc có được hưởng bảo hiểm không?",
+  "Quy trình xin nghỉ ốm ra sao?",
+  "Chính sách làm remote hiện tại là gì?",
+];
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export default function PolicyChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
-  
-  // Document states
-  const [documents, setDocuments] = useState<PolicyDocument[]>([]);
-  const [selectedDocs, setSelectedDocs] = useState<number[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState<Record<number, string>>({});
 
-  // Danger zone confirmations
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [confirmRebuild, setConfirmRebuild] = useState(false);
+  const sendMessage = async (text: string) => {
+    const clean = text.trim();
+    if (!clean || loading) return;
 
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
-
-  const fetchDocuments = async () => {
-    try {
-      const res = await api.get("/policy/documents");
-      const data = await res.json();
-      setDocuments(data);
-    } catch (err) {
-      console.error("Failed to load documents", err);
-    }
-  };
-
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    setUploadSuccess(null);
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      formData.append("files", files[i]);
-    }
-
-    try {
-      await api.post("/policy/ingest", formData);
-      setUploadSuccess("Đã xếp hàng tài liệu vào hàng đợi xử lý!");
-      setTimeout(() => setUploadSuccess(null), 5000);
-      fetchDocuments();
-    } catch (err: any) {
-      alert(`Lỗi upload: ${err.message}`);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileUpload(e.dataTransfer.files);
-    }
-  };
-
-  const toggleDocSelection = (id: number) => {
-    setSelectedDocs(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim() || loading) return;
-
-    const userMessage: ChatMessage = { role: "user", content: query };
-    setMessages(prev => [...prev, userMessage]);
-    setQuery("");
-    setLoading(true);
-
-    const historyPayload = messages.map(msg => ({
+    const userMessage: ChatMessage = { role: "user", content: clean };
+    const historyPayload = messages.map((msg) => ({
       role: msg.role,
-      content: msg.content
+      content: msg.content,
     }));
 
-    // Add empty placeholder assistant message
-    const placeholderMsg: ChatMessage = { role: "assistant", content: "" };
-    setMessages(prev => [...prev, placeholderMsg]);
+    setMessages((prev) => [...prev, userMessage, { role: "assistant", content: "" }]);
+    setQuery("");
+    setLoading(true);
 
     try {
       let fullContent = "";
       await api.readStream(
         "/policy/chat/stream",
         {
-          query: userMessage.content,
+          query: clean,
           k: 5,
           history: historyPayload,
-          doc_ids: selectedDocs.length > 0 ? selectedDocs.map(String) : null
+          doc_ids: null,
         },
         (chunk) => {
           fullContent += chunk;
-          setMessages(prev => {
+          setMessages((prev) => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
-            if (last && last.role === "assistant") {
+            if (last?.role === "assistant") {
               last.content = fullContent;
             }
             return updated;
           });
         },
         (citations) => {
-          setMessages(prev => {
+          setMessages((prev) => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
-            if (last && last.role === "assistant") {
+            if (last?.role === "assistant") {
               last.citations = citations;
             }
             return updated;
           });
         }
       );
-    } catch (err: any) {
-      setMessages(prev => {
+    } catch (err: unknown) {
+      setMessages((prev) => {
         const updated = [...prev];
         const last = updated[updated.length - 1];
-        if (last && last.role === "assistant") {
-          last.content = `Lỗi kết nối API: ${err.message}`;
+        if (last?.role === "assistant") {
+          last.content = `Không thể kết nối chatbot: ${errorMessage(err)}`;
         }
         return updated;
       });
@@ -157,260 +93,169 @@ export default function PolicyChatPage() {
     }
   };
 
-  const handleClearIndex = async () => {
-    if (!confirmClear) return;
-    try {
-      await api.post("/policy/clear?confirm=true");
-      alert("Đã gửi lệnh xóa Vector Index chính sách!");
-      setConfirmClear(false);
-      setMessages([]);
-      fetchDocuments();
-    } catch (err: any) {
-      alert(err.message);
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendMessage(query);
   };
 
-  const handleRebuildIndex = async () => {
-    if (!confirmRebuild) return;
+  const sendFeedback = async (messageIndex: number, rating: "up" | "down") => {
+    const answer = messages[messageIndex]?.content || "";
+    const previousUser = [...messages]
+      .slice(0, messageIndex)
+      .reverse()
+      .find((msg) => msg.role === "user");
     try {
-      await api.post("/policy/rebuild?confirm=true");
-      alert("Đã gửi lệnh rebuild Vector Index!");
-      setConfirmRebuild(false);
-    } catch (err: any) {
-      alert(err.message);
+      await api.post("/policy/feedback", {
+        query: previousUser?.content || "",
+        answer,
+        rating,
+      });
+      setFeedbackSent((prev) => ({ ...prev, [messageIndex]: rating }));
+    } catch (err) {
+      console.error("Failed to send feedback", err);
     }
   };
 
   return (
-    <div className="flex h-screen bg-[#0B0F19] text-slate-100 overflow-hidden">
-      {/* Sidebar - Document Management */}
-      <aside className="w-80 border-r border-slate-800 bg-[#0F172A] flex flex-col shrink-0">
-        {/* Sidebar Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center gap-3">
-          <Link href="/" className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">
-            <ArrowLeft className="w-4 h-4" />
+    <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col">
+      <header className="border-b border-slate-800 bg-[#0F172A]/80">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <Bot className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-white">HR Policy Chatbot</h1>
+              <p className="text-xs text-slate-400">Hỏi đáp chính sách nội bộ dựa trên tài liệu đã được HR/Admin publish</p>
+            </div>
+          </div>
+          <Link href="/admin/knowledge-base" className="hidden sm:inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+            <BookOpen className="w-4 h-4" />
+            Admin KB
           </Link>
-          <div className="flex items-center gap-2 text-emerald-400">
-            <BookOpen className="w-5 h-5" />
-            <span className="font-bold text-white tracking-wide">Tài liệu Chính sách</span>
-          </div>
         </div>
+      </header>
 
-        {/* Drag & Drop Upload */}
-        <div className="p-4 border-b border-slate-800">
-          <div
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-            className={`relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors ${
-              dragActive ? "border-emerald-500 bg-emerald-500/5" : "border-slate-700 hover:border-slate-600 bg-slate-900/50"
-            }`}
-          >
-            <input
-              type="file"
-              multiple
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              onChange={(e) => handleFileUpload(e.target.files)}
-              accept=".pdf,.txt,.docx,.md"
-              disabled={uploading}
-            />
-            <Upload className={`w-8 h-8 mx-auto mb-2 text-slate-400 ${uploading ? "animate-bounce text-emerald-400" : ""}`} />
-            <p className="text-xs text-slate-300 font-medium">Kéo thả tài liệu vào đây</p>
-            <p className="text-[10px] text-slate-500 mt-1">Hỗ trợ PDF, DOCX, TXT, MD</p>
-          </div>
-          {uploadSuccess && (
-            <div className="mt-2 text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-2 rounded-lg">
-              {uploadSuccess}
-            </div>
-          )}
-        </div>
-
-        {/* Ingested Documents List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Danh sách tài liệu</span>
-            <button onClick={fetchDocuments} className="text-slate-400 hover:text-white transition-colors p-1 rounded-md hover:bg-slate-800">
-              <RotateCw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {documents.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-4">Chưa có tài liệu nào.</p>
-            ) : (
-              documents.map((doc) => {
-                const isSelected = selectedDocs.includes(doc.id);
-                return (
-                  <div
-                    key={doc.id}
-                    onClick={() => toggleDocSelection(doc.id)}
-                    className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
-                      isSelected 
-                        ? "bg-emerald-500/10 border-emerald-500/40 text-white" 
-                        : "bg-slate-900/40 border-slate-800 hover:border-slate-700 text-slate-300"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 overflow-hidden pr-2">
-                      <FileText className={`w-4 h-4 shrink-0 ${isSelected ? "text-emerald-400" : "text-slate-400"}`} />
-                      <span className="text-xs font-medium truncate leading-none">{doc.filename}</span>
-                    </div>
-                    <span className="text-[10px] uppercase font-bold shrink-0 text-slate-500">
-                      {doc.ingest_status === "OK" ? "🟢" : doc.ingest_status === "PENDING" ? "🟡" : "🔴"}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Danger Zone */}
-        <div className="p-4 border-t border-slate-800 bg-[#0c1222] space-y-3">
-          <div className="flex items-center gap-1.5 text-rose-400 text-xs font-bold uppercase tracking-wider">
-            <AlertTriangle className="w-4 h-4" />
-            <span>Danger Zone</span>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                id="checkClear" 
-                checked={confirmClear} 
-                onChange={(e) => setConfirmClear(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-900 text-rose-500 focus:ring-rose-500/20"
-              />
-              <label htmlFor="checkClear" className="text-[10px] text-slate-400 cursor-pointer">Xác nhận xóa Index</label>
-            </div>
-            <button
-              onClick={handleClearIndex}
-              disabled={!confirmClear}
-              className="w-full text-xs py-2 bg-rose-600/10 hover:bg-rose-600 border border-rose-500/30 hover:border-rose-500 text-rose-400 hover:text-white rounded-lg transition-all disabled:opacity-40 disabled:hover:bg-rose-600/10 disabled:hover:text-rose-400"
-            >
-              Clear Vector Index
-            </button>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input 
-                type="checkbox" 
-                id="checkRebuild" 
-                checked={confirmRebuild} 
-                onChange={(e) => setConfirmRebuild(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500/20"
-              />
-              <label htmlFor="checkRebuild" className="text-[10px] text-slate-400 cursor-pointer">Xác nhận Rebuild</label>
-            </div>
-            <button
-              onClick={handleRebuildIndex}
-              disabled={!confirmRebuild}
-              className="w-full text-xs py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg transition-all disabled:opacity-40"
-            >
-              Rebuild Index
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col min-w-0 bg-[#0B0F19]">
-        {/* Chat Header */}
-        <header className="p-4 border-b border-slate-800 flex justify-between items-center bg-[#0F172A]/50">
-          <div>
-            <h1 className="text-lg font-bold text-white leading-tight">HR Policy Assistant</h1>
-            <p className="text-xs text-slate-400">Trò chuyện và tra cứu quy chế nội bộ tự động</p>
-          </div>
-          {messages.length > 0 && (
-            <button 
-              onClick={() => setMessages([])} 
-              className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 transition-colors"
-            >
-              Xóa lịch sử chat
-            </button>
-          )}
-        </header>
-
-        {/* Message Panel */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                <MessageSquare className="w-8 h-8" />
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 py-6 flex flex-col">
+        {messages.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="max-w-2xl w-full text-center space-y-8">
+              <div className="space-y-3">
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <MessageSquare className="w-8 h-8" />
+                </div>
+                <h2 className="text-2xl font-bold text-white">Bạn muốn hỏi gì về chính sách công ty?</h2>
+                <p className="text-sm text-slate-400">
+                  Chatbot chỉ trả lời dựa trên tài liệu nội bộ đã được admin upload và index.
+                </p>
               </div>
-              <h3 className="text-lg font-bold text-white">Bạn cần trợ giúp gì về chính sách?</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Hãy tải lên tài liệu chính sách ở cột bên trái (như quy chế làm việc, bảo hiểm, nghỉ phép...) rồi đặt câu hỏi để nhận câu trả lời đối chiếu chính xác.
-              </p>
+              <div className="grid sm:grid-cols-2 gap-3 text-left">
+                {suggestedPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => sendMessage(prompt)}
+                    className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 text-sm text-slate-300 hover:text-white transition-colors"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
-            messages.map((msg, idx) => {
+          </div>
+        ) : (
+          <div className="flex-1 space-y-6 pb-6">
+            {messages.map((msg, idx) => {
               const isUser = msg.role === "user";
               return (
-                <div key={idx} className={`flex flex-col ${isUser ? "items-end" : "items-start"} space-y-2`}>
-                  {/* Chat bubble */}
-                  <div 
-                    className={`max-w-[80%] rounded-2xl p-4 text-sm leading-relaxed ${
-                      isUser 
-                        ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-none shadow-lg shadow-blue-500/15" 
-                        : "bg-slate-900 border border-slate-800 text-slate-100 rounded-bl-none"
-                    }`}
-                  >
-                    {msg.content || (
-                      <span className="inline-flex gap-1 items-center">
-                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce"></span>
-                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce delay-100"></span>
-                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce delay-200"></span>
-                      </span>
-                    )}
-                  </div>
+                <div key={idx} className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+                  {!isUser && (
+                    <div className="mt-1 w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                      <Bot className="w-4 h-4" />
+                    </div>
+                  )}
+                  <div className={`max-w-[78%] space-y-3 ${isUser ? "items-end" : "items-start"}`}>
+                    <div
+                      className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                        isUser
+                          ? "bg-blue-600 text-white rounded-br-sm"
+                          : "bg-slate-900 border border-slate-800 text-slate-100 rounded-bl-sm"
+                      }`}
+                    >
+                      {msg.content || (
+                        <span className="inline-flex items-center gap-1 text-slate-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce delay-100" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce delay-200" />
+                        </span>
+                      )}
+                    </div>
 
-                  {/* Citations panel */}
-                  {!isUser && msg.citations && msg.citations.length > 0 && (
-                    <div className="w-full max-w-[85%] mt-2 pl-4">
-                      <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5 mb-2">
-                        <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Tài liệu tham khảo nguồn ({msg.citations.length})</span>
+                    {!isUser && msg.content && (
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <button
+                          onClick={() => sendFeedback(idx, "up")}
+                          className="p-1.5 rounded-md hover:bg-slate-800 hover:text-emerald-400"
+                          title="Câu trả lời hữu ích"
+                        >
+                          {feedbackSent[idx] === "up" ? <Check className="w-4 h-4 text-emerald-400" /> : <ThumbsUp className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => sendFeedback(idx, "down")}
+                          className="p-1.5 rounded-md hover:bg-slate-800 hover:text-rose-400"
+                          title="Câu trả lời chưa đúng"
+                        >
+                          {feedbackSent[idx] === "down" ? <Check className="w-4 h-4 text-rose-400" /> : <ThumbsDown className="w-4 h-4" />}
+                        </button>
                       </div>
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        {msg.citations.map((cit, cIdx) => (
-                          <div key={cIdx} className="bg-slate-900/60 border border-slate-800/80 rounded-lg p-3 text-xs text-slate-400 relative overflow-hidden group">
-                            <div className="flex justify-between items-center mb-1 bg-slate-800/40 px-2 py-0.5 rounded border border-slate-800/50">
-                              <span className="font-bold text-slate-300 truncate max-w-[120px]">{cit.source}</span>
-                              <span className="text-[10px] text-emerald-400 font-bold shrink-0">{Math.round(cit.score * 100)}% Match</span>
+                    )}
+
+                    {!isUser && msg.citations && msg.citations.length > 0 && (
+                      <div className="grid gap-2">
+                        {msg.citations.map((cit, citIdx) => (
+                          <div key={citIdx} className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-400">
+                            <div className="flex items-center justify-between gap-3 mb-1">
+                              <span className="font-semibold text-slate-300 truncate">{cit.source}</span>
+                              <span className="text-emerald-400 shrink-0">{Math.round(cit.score * 100)}%</span>
                             </div>
-                            <p className="italic text-slate-300 leading-normal line-clamp-3">"{cit.snippet}"</p>
+                            <p className="line-clamp-2">{cit.snippet}</p>
                           </div>
                         ))}
                       </div>
+                    )}
+                  </div>
+                  {isUser && (
+                    <div className="mt-1 w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 flex items-center justify-center shrink-0">
+                      <UserRound className="w-4 h-4" />
                     </div>
                   )}
                 </div>
               );
-            })
-          )}
-        </div>
-
-        {/* Input panel */}
-        <footer className="p-4 border-t border-slate-800 bg-[#0F172A]/40">
-          <form onSubmit={handleSend} className="max-w-4xl mx-auto flex gap-3">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={loading ? "Đang chuẩn bị câu trả lời..." : "Đặt câu hỏi về chính sách quy chế tại đây..."}
-              disabled={loading}
-              className="flex-1 bg-slate-900 hover:bg-slate-900/80 border border-slate-800 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-100 placeholder-slate-500 disabled:opacity-50"
-            />
-            <button
-              type="submit"
-              disabled={!query.trim() || loading}
-              className="p-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-xl transition-all shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          </form>
-        </footer>
+            })}
+          </div>
+        )}
       </main>
+
+      <footer className="border-t border-slate-800 bg-[#0F172A]/80">
+        <form onSubmit={handleSubmit} className="max-w-5xl mx-auto px-4 py-4 flex gap-3">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            disabled={loading}
+            placeholder={loading ? "Đang trả lời..." : "Nhập câu hỏi về chính sách nội bộ..."}
+            className="flex-1 bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm outline-none text-slate-100 placeholder:text-slate-500"
+          />
+          <button
+            type="submit"
+            disabled={!query.trim() || loading}
+            className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </form>
+      </footer>
     </div>
   );
 }

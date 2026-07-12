@@ -39,6 +39,10 @@ export interface PolicyDocument {
   filename: string;
   ingest_status: string;
   ingest_method: string;
+  category: string;
+  visibility: string;
+  version: string;
+  status: string;
   error: string | null;
 }
 
