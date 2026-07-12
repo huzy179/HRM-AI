@@ -22,6 +22,10 @@ docker compose exec ollama ollama pull llama3
 - Next.js UI: `http://localhost:3000`
 - API docs: `http://localhost:8000/docs`
 - API health: `http://localhost:8000/health`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3001` (`admin` / `admin`)
+- Loki: `http://localhost:3100`
+- Jaeger traces: `http://localhost:16686`
 
 ## Tài liệu quan trọng
 
@@ -46,3 +50,16 @@ Service `worker` (all-in-one) chỉ dùng khi bật profile legacy:
 docker compose --profile legacy up --build worker
 ```
 
+## Monitoring / Observability
+
+- Prometheus scrape endpoint: `GET /metrics/prometheus`
+- JSON summary endpoint cũ: `GET /metrics/summary`
+- Grafana dashboard provisioned sẵn: `HRM AI Overview`
+- Loki nhận log container qua Promtail
+- OpenTelemetry traces được gửi sang Jaeger khi `OTEL_EXPORTER_OTLP_ENDPOINT` được set
+
+Ragas Policy RAG eval:
+
+```bash
+docker compose exec api python evals/ragas_policy_eval.py --input evals/policy_eval_questions.jsonl
+```

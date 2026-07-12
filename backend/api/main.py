@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from backend.api.routes import campaigns, jobs, health, policy, audit, metrics, admin, automation
 from backend.api.middleware import auth_rate_limit_and_audit_middleware
+from backend.observability.telemetry import setup_telemetry
 
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(audit.router, prefix="/audit", tags=["audit"])
     app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
+    setup_telemetry(app)
 
     return app
 

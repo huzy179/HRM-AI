@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import List
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -14,6 +15,7 @@ from backend.api.upload_limits import ensure_file_count, save_upload_limited
 from backend.api.file_storage import unique_dest
 from backend.core.tenant import current_tenant_id
 from backend.api.security import require_admin
+from backend.observability.metrics import RAG_CHAT_DURATION_SECONDS, RAG_CHAT_TOTAL, RAG_RETRIEVED_CHUNKS
 
 
 router = APIRouter()
@@ -91,13 +93,23 @@ from fastapi.responses import StreamingResponse
 
 @router.post("/chat", response_model=PolicyChatOut)
 def chat_policy(payload: PolicyChatIn) -> PolicyChatOut:
+    start = time.time()
+    tenant_id = current_tenant_id()
     rag = PolicyRAG()
     history_list = [{"role": msg.role, "content": msg.content} for msg in payload.history] if payload.history else None
-    ans = rag.answer(query=payload.query, k=payload.k, history=history_list, doc_ids=payload.doc_ids)
-    return PolicyChatOut(
-        answer=ans.answer,
-        citations=[{"source": c.source, "chunk_id": c.chunk_id, "score": c.score, "snippet": c.snippet} for c in ans.citations],
-    )
+    try:
+        ans = rag.answer(query=payload.query, k=payload.k, history=history_list, doc_ids=payload.doc_ids)
+        RAG_CHAT_TOTAL.labels(tenant_id, "ok").inc()
+        RAG_RETRIEVED_CHUNKS.labels(tenant_id).observe(len(ans.citations))
+        return PolicyChatOut(
+            answer=ans.answer,
+            citations=[{"source": c.source, "chunk_id": c.chunk_id, "score": c.score, "snippet": c.snippet} for c in ans.citations],
+        )
+    except Exception:
+        RAG_CHAT_TOTAL.labels(tenant_id, "error").inc()
+        raise
+    finally:
+        RAG_CHAT_DURATION_SECONDS.labels(tenant_id).observe(max(0.0, time.time() - start))
 
 
 @router.post("/chat/stream")

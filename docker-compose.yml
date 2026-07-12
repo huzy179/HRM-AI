@@ -24,6 +24,62 @@ services:
     ports:
       - "6379:6379"
 
+  loki:
+    image: grafana/loki:3.3.2
+    ports:
+      - "3100:3100"
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/config.yml:ro
+      - loki:/loki
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus:/prometheus
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.63.0
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
   api:
     build:
       context: .
@@ -54,6 +110,8 @@ services:
       - OCR_CROP_RATIO=0.05
       - ANONYMIZED_TELEMETRY=False
       - POSTHOG_DISABLED=1
+      - OTEL_SERVICE_NAME=hrm-ai-api
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
@@ -86,6 +144,8 @@ services:
       - OCR_CROP_RATIO=0.05
       - ANONYMIZED_TELEMETRY=False
       - POSTHOG_DISABLED=1
+      - OTEL_SERVICE_NAME=hrm-ai-worker-legacy
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
@@ -120,6 +180,8 @@ services:
       - OCR_CROP_RATIO=0.05
       - ANONYMIZED_TELEMETRY=False
       - POSTHOG_DISABLED=1
+      - OTEL_SERVICE_NAME=hrm-ai-worker-parse
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
@@ -154,6 +216,8 @@ services:
       - OCR_CROP_RATIO=0.05
       - ANONYMIZED_TELEMETRY=False
       - POSTHOG_DISABLED=1
+      - OTEL_SERVICE_NAME=hrm-ai-worker-index
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
@@ -188,6 +252,8 @@ services:
       - OCR_CROP_RATIO=0.05
       - ANONYMIZED_TELEMETRY=False
       - POSTHOG_DISABLED=1
+      - OTEL_SERVICE_NAME=hrm-ai-worker-llm
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
@@ -221,3 +287,6 @@ services:
 volumes:
   ollama:
   postgres:
+  prometheus:
+  grafana:
+  loki:

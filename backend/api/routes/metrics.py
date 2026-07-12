@@ -4,11 +4,14 @@ from datetime import datetime, timedelta
 from typing import Dict, List
 
 from fastapi import APIRouter
+from fastapi.responses import Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
 from backend.db.session import SessionDep
 from backend.db import models
 from backend.core.tenant import current_tenant_id
+from backend.observability.metrics import JOBS_TOTAL, JOB_DURATION_SECONDS, JOB_TYPE_TOTAL
 
 
 router = APIRouter()
@@ -53,6 +56,9 @@ def metrics_summary(session: SessionDep, minutes: int = 60, max_rows: int = 5000
     for r in rows:
         groups.setdefault(r.job_type, []).append(r)
 
+    for status in ["QUEUED", "RUNNING", "DONE", "FAILED"]:
+        JOBS_TOTAL.labels(tenant_id, status).set(sum(1 for r in rows if r.status == status))
+
     by_type: List[JobTypeStats] = []
     for job_type, items in sorted(groups.items(), key=lambda x: (-len(x[1]), x[0])):
         durations = sorted([int(getattr(x, "duration_ms", 0) or 0) for x in items if (getattr(x, "duration_ms", 0) or 0) > 0])
@@ -62,6 +68,10 @@ def metrics_summary(session: SessionDep, minutes: int = 60, max_rows: int = 5000
             idx = int(round(0.95 * (len(durations) - 1)))
             p95 = int(durations[idx])
         failed_count = sum(1 for x in items if x.status == "FAILED")
+        for status in ["QUEUED", "RUNNING", "DONE", "FAILED"]:
+            JOB_TYPE_TOTAL.labels(tenant_id, job_type, status).set(sum(1 for x in items if x.status == status))
+        JOB_DURATION_SECONDS.labels(tenant_id, job_type, "avg").set(avg / 1000)
+        JOB_DURATION_SECONDS.labels(tenant_id, job_type, "p95").set(p95 / 1000)
         by_type.append(
             JobTypeStats(
                 job_type=job_type,
@@ -79,3 +89,9 @@ def metrics_summary(session: SessionDep, minutes: int = 60, max_rows: int = 5000
         jobs_failed=failed,
         by_type=by_type,
     )
+
+
+@router.get("/prometheus")
+def prometheus_metrics(session: SessionDep, minutes: int = 60) -> Response:
+    metrics_summary(session=session, minutes=minutes)
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

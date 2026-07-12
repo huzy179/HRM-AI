@@ -1,0 +1,3 @@
+{"question":"Quy định nghỉ phép năm như thế nào?","ground_truth":"Điền câu trả lời kỳ vọng dựa trên tài liệu policy của bạn.","expected_source":"policy-file.pdf"}
+{"question":"Nhân viên cần làm gì khi muốn nghỉ ốm?","ground_truth":"Điền câu trả lời kỳ vọng dựa trên tài liệu policy của bạn.","expected_source":"policy-file.pdf"}
+

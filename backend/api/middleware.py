@@ -12,6 +12,7 @@ from backend.api.rate_limit import enforce_rate_limit
 from backend.api.security import AuthContext, get_auth_context, is_public_path
 from backend.db import models
 from backend.core.tenant import current_tenant_id
+from backend.observability.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 
 
 async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Callable) -> Response:
@@ -43,9 +44,13 @@ async def auth_rate_limit_and_audit_middleware(request: Request, call_next: Call
         resp.headers["X-Tenant-Id"] = tenant_id
         return resp
     finally:
+        duration_s = max(0.0, time.time() - start)
+        path = request.scope.get("route").path if request.scope.get("route") else request.url.path
+        HTTP_REQUESTS_TOTAL.labels(request.method, path, str(status_code)).inc()
+        HTTP_REQUEST_DURATION_SECONDS.labels(request.method, path).observe(duration_s)
         # Best-effort audit log (don't break requests if DB is down)
         try:
-            duration_ms = int(max(0.0, time.time() - start) * 1000)
+            duration_ms = int(duration_s * 1000)
             ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (
                 request.client.host if request.client else "unknown"
             )
