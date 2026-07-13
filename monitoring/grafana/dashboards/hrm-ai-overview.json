@@ -5,7 +5,10 @@
   "editable": true,
   "panels": [
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {}
       },
@@ -26,7 +29,10 @@
       "type": "timeseries"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {}
       },
@@ -47,7 +53,10 @@
       "type": "timeseries"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {}
       },
@@ -68,7 +77,10 @@
       "type": "timeseries"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {}
       },
@@ -87,10 +99,60 @@
       ],
       "title": "Policy RAG latency p95",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {}
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum(hrm_job_type_total{job_type=\"policy_eval\"}) by (status)",
+          "legendFormat": "policy_eval {{status}}"
+        }
+      ],
+      "title": "Policy Eval jobs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {}
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "hrm_job_duration_seconds{stat=\"p95\"}",
+          "legendFormat": "p95 {{job_type}}"
+        }
+      ],
+      "title": "Job duration p95",
+      "type": "timeseries"
     }
   ],
   "schemaVersion": 39,
-  "tags": ["hrm-ai"],
+  "tags": [
+    "hrm-ai"
+  ],
   "templating": {
     "list": []
   },
@@ -100,5 +162,5 @@
   },
   "title": "HRM AI Overview",
   "uid": "hrm-ai-overview",
-  "version": 1
+  "version": 2
 }
