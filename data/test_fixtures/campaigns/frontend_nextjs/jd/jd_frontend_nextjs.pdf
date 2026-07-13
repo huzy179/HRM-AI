@@ -1,0 +1,57 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 575 >>
+stream
+BT
+/F1 18 Tf
+56 786 Td
+(JD - Frontend Engineer Next.js) Tj
+/F1 11 Tf
+0 -18 Td
+(Vi tri: Frontend Engineer Next.js) Tj
+0 -6 Td
+0 -18 Td
+(Kinh nghiem yeu cau: toi thieu 2 nam lam viec voi React/Next.js.) Tj
+0 -6 Td
+0 -18 Td
+(Ky nang bat buoc: TypeScript, React, Next.js, Tailwind CSS, API integration, responsive) Tj
+0 -18 Td
+(UI.) Tj
+0 -6 Td
+0 -18 Td
+(Ky nang uu tien: accessibility, Playwright, component design, state management.) Tj
+0 -6 Td
+0 -18 Td
+(Cong viec: xay dung man hinh CV screening, dashboard, form upload, xu ly loading/error) Tj
+0 -18 Td
+(states.) Tj
+0 -6 Td
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000317 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+943
+%%EOF

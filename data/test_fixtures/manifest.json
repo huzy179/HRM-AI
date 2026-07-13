@@ -1,0 +1,109 @@
+{
+  "campaigns": [
+    {
+      "name": "Backend Python FastAPI - Thang 07/2026",
+      "slug": "backend_python_fastapi",
+      "jd": "data/test_fixtures/campaigns/backend_python_fastapi/jd/jd_backend_python_fastapi.pdf",
+      "cvs": [
+        "data/test_fixtures/campaigns/backend_python_fastapi/cvs/cv_backend_top_match_linh_nguyen.pdf",
+        "data/test_fixtures/campaigns/backend_python_fastapi/cvs/cv_backend_mid_match_minh_tran.pdf",
+        "data/test_fixtures/campaigns/backend_python_fastapi/cvs/cv_backend_low_match_hoa_pham.pdf",
+        "data/test_fixtures/campaigns/backend_python_fastapi/cvs/cv_backend_junior_anh_le.pdf",
+        "data/test_fixtures/campaigns/backend_python_fastapi/cvs/cv_backend_scanned_like_poor_quality.pdf"
+      ],
+      "settings": {
+        "w_embed": 0.7,
+        "required_skills": [
+          "python",
+          "fastapi",
+          "postgresql",
+          "docker",
+          "redis",
+          "pytest"
+        ],
+        "min_years_override": 3.0
+      }
+    },
+    {
+      "name": "Frontend Next.js - Thang 07/2026",
+      "slug": "frontend_nextjs",
+      "jd": "data/test_fixtures/campaigns/frontend_nextjs/jd/jd_frontend_nextjs.pdf",
+      "cvs": [
+        "data/test_fixtures/campaigns/frontend_nextjs/cvs/cv_frontend_top_match_nam_do.pdf",
+        "data/test_fixtures/campaigns/frontend_nextjs/cvs/cv_frontend_mid_match_thao_vo.pdf",
+        "data/test_fixtures/campaigns/frontend_nextjs/cvs/cv_frontend_low_match_quan_bui.pdf"
+      ],
+      "settings": {
+        "w_embed": 0.65,
+        "required_skills": [
+          "typescript",
+          "react",
+          "next.js",
+          "tailwind css",
+          "api integration"
+        ],
+        "min_years_override": 2.0
+      }
+    },
+    {
+      "name": "Data AI Engineer - Thang 07/2026",
+      "slug": "data_ai_engineer",
+      "jd": "data/test_fixtures/campaigns/data_ai_engineer/jd/jd_data_ai_engineer.pdf",
+      "cvs": [
+        "data/test_fixtures/campaigns/data_ai_engineer/cvs/cv_data_ai_top_match_khanh_mai.pdf",
+        "data/test_fixtures/campaigns/data_ai_engineer/cvs/cv_data_ai_mid_match_tu_nguyen.pdf",
+        "data/test_fixtures/campaigns/data_ai_engineer/cvs/cv_data_ai_low_match_lan_ho.pdf",
+        "data/test_fixtures/campaigns/data_ai_engineer/cvs/cv_data_ai_research_match_bao_tran.pdf"
+      ],
+      "settings": {
+        "w_embed": 0.72,
+        "required_skills": [
+          "python",
+          "sql",
+          "pandas",
+          "machine learning",
+          "rag",
+          "docker"
+        ],
+        "min_years_override": 3.0
+      }
+    }
+  ],
+  "policy_docs": [
+    {
+      "file": "data/test_fixtures/policy_docs/policy_working_rules_2026.pdf",
+      "category": "working_rules",
+      "visibility": "employee",
+      "version": "2026.1",
+      "status": "published"
+    },
+    {
+      "file": "data/test_fixtures/policy_docs/policy_benefits_leave_2026.pdf",
+      "category": "benefits",
+      "visibility": "employee",
+      "version": "2026.1",
+      "status": "published"
+    },
+    {
+      "file": "data/test_fixtures/policy_docs/policy_recruitment_review_2026.pdf",
+      "category": "recruitment",
+      "visibility": "hr",
+      "version": "2026.1",
+      "status": "published"
+    },
+    {
+      "file": "data/test_fixtures/policy_docs/policy_remote_work_2026.pdf",
+      "category": "remote_work",
+      "visibility": "employee",
+      "version": "2026.1",
+      "status": "published"
+    },
+    {
+      "file": "data/test_fixtures/policy_docs/policy_expense_training_2026.pdf",
+      "category": "expense_training",
+      "visibility": "employee",
+      "version": "2026.1",
+      "status": "published"
+    }
+  ]
+}

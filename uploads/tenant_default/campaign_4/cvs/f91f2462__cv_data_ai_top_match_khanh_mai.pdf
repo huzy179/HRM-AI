@@ -1,0 +1,60 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 660 >>
+stream
+BT
+/F1 18 Tf
+56 786 Td
+(CV - Khanh Mai) Tj
+/F1 11 Tf
+0 -18 Td
+(Khanh Mai - Data AI Engineer) Tj
+0 -6 Td
+0 -18 Td
+(Email: khanh.mai.test@example.com | Phone: 0903000001) Tj
+0 -6 Td
+0 -18 Td
+(Kinh nghiem: 5 nam data engineering va 2 nam xay dung RAG application.) Tj
+0 -6 Td
+0 -18 Td
+(Ky nang: Python, SQL, pandas, scikit-learn, LangChain, Chroma, vector database, Docker,) Tj
+0 -18 Td
+(evaluation dataset.) Tj
+0 -6 Td
+0 -18 Td
+(Du an: policy chatbot noi bo, pipeline ingest PDF, benchmark retrieval, monitoring chat) Tj
+0 -18 Td
+(quality.) Tj
+0 -6 Td
+0 -18 Td
+(Thanh tich: tang recall retrieval tu 68% len 86% bang chunking va metadata filtering.) Tj
+0 -6 Td
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000317 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1028
+%%EOF

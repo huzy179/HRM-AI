@@ -1,0 +1,63 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 697 >>
+stream
+BT
+/F1 18 Tf
+56 786 Td
+(CV - Linh Nguyen) Tj
+/F1 11 Tf
+0 -18 Td
+(Linh Nguyen - Senior Backend Engineer) Tj
+0 -6 Td
+0 -18 Td
+(Email: linh.nguyen.test@example.com | Phone: 0901000001) Tj
+0 -6 Td
+0 -18 Td
+(Kinh nghiem: 5 nam phat trien backend Python.) Tj
+0 -6 Td
+0 -18 Td
+(Ky nang: Python, FastAPI, PostgreSQL, Redis, Docker, pytest, REST API, RQ, Prometheus,) Tj
+0 -18 Td
+(OpenTelemetry.) Tj
+0 -6 Td
+0 -18 Td
+(Du an gan day: xay dung HR SaaS voi FastAPI, PostgreSQL, Redis queue, Docker Compose,) Tj
+0 -18 Td
+(CI/CD.) Tj
+0 -6 Td
+0 -18 Td
+(Thanh tich: giam 42% thoi gian API latency bang index SQL va caching Redis.) Tj
+0 -6 Td
+0 -18 Td
+(Hoc van: Dai hoc Bach Khoa, Khoa hoc may tinh.) Tj
+0 -6 Td
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000317 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1065
+%%EOF

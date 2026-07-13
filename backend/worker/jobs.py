@@ -248,6 +248,19 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
         parts.append(b"skills:" + ",".join(sorted(required_skills_override or [])).encode("utf-8"))
         for cand in ok_candidates:
             parts.append(b"cand:" + str(cand.id).encode("utf-8") + b":" + sha256_text(cand.text or "").encode("utf-8"))
+            profile = (
+                session.query(models.CandidateProfile)
+                .filter(models.CandidateProfile.candidate_id == cand.id, models.CandidateProfile.tenant_id == tenant_id)
+                .one_or_none()
+            )
+            if profile is not None:
+                profile_fingerprint = "|".join(
+                    [
+                        str(float(profile.years_experience or 0.0)),
+                        profile.skills_json or "[]",
+                    ]
+                )
+                parts.append(b"profile:" + str(cand.id).encode("utf-8") + b":" + sha256_text(profile_fingerprint).encode("utf-8"))
         run_hash = sha256_hex(b"\n".join(parts))
 
         # Skip if DB already has same run_hash and Chroma index directory exists
@@ -290,7 +303,7 @@ def _screen_campaign(campaign_id: int, job_id: str) -> None:
             evidence = matcher.evidence_chunks(jd_text=jd.text or "", cv_id=str(cand_id), k=80, top_n=3)
             profile = (
                 session.query(models.CandidateProfile)
-                .filter(models.CandidateProfile.candidate_id == cand_id)
+                .filter(models.CandidateProfile.candidate_id == cand_id, models.CandidateProfile.tenant_id == tenant_id)
                 .one_or_none()
             )
             rule = score_candidate_rules(
