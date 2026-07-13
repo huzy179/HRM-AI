@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import logging
 from pathlib import Path
 import time
@@ -71,6 +72,8 @@ def run_job(job_type: str, payload: dict, job_id: str) -> None:
             _policy_rebuild(job_id)
         elif job_type == "policy_clear":
             _policy_clear(job_id)
+        elif job_type == "policy_eval":
+            _policy_eval(payload["run_id"], job_id)
         elif job_type == "extract_profile":
             _extract_profile(payload["campaign_id"], payload["candidate_id"], job_id)
         elif job_type == "cleanup_storage":
@@ -379,6 +382,124 @@ def _review_candidate(campaign_id: int, candidate_id: int, job_id: str) -> None:
         existing.gaps_json = models.json_dumps(review.gaps)
         existing.evidence_json = models.json_dumps(review.evidence)
         session.commit()
+    finally:
+        session.close()
+    _update_job(job_id, progress=100)
+
+
+def _safe_json_loads(raw: str, fallback):
+    try:
+        return json.loads(raw or "")
+    except Exception:
+        return fallback
+
+
+def _contains_all_keywords(answer: str, keywords: list[str]) -> bool:
+    normalized = (answer or "").lower()
+    return all(str(keyword).strip().lower() in normalized for keyword in keywords if str(keyword).strip())
+
+
+def _source_matches(citations: list[dict], expected_source: str) -> bool:
+    expected = (expected_source or "").strip().lower()
+    if not expected:
+        return True
+    return any(expected in str(c.get("source", "")).lower() for c in citations)
+
+
+def _policy_eval(run_id: int, job_id: str) -> None:
+    session = SessionLocal()
+    try:
+        tenant_id = session.get(models.Job, job_id).tenant_id if session.get(models.Job, job_id) else "default"
+        run = session.get(models.PolicyEvalRun, int(run_id))
+        if run is None or run.tenant_id != tenant_id:
+            raise RuntimeError("EVAL_RUN_NOT_FOUND")
+
+        items = (
+            session.query(models.PolicyEvalItem)
+            .filter(models.PolicyEvalItem.run_id == run.id, models.PolicyEvalItem.tenant_id == tenant_id)
+            .order_by(models.PolicyEvalItem.id.asc())
+            .all()
+        )
+        if not items:
+            raise RuntimeError("EVAL_ITEMS_EMPTY")
+
+        run.status = "RUNNING"
+        run.error = None
+        session.commit()
+
+        rag = PolicyRAG()
+        passed = 0
+        total_score = 0.0
+        total = len(items)
+
+        for index, item in enumerate(items, start=1):
+            keywords = _safe_json_loads(item.expected_keywords_json, [])
+            if not isinstance(keywords, list):
+                keywords = []
+
+            answer = rag.answer(query=item.question, k=5)
+            citations = [
+                {
+                    "source": c.source,
+                    "chunk_id": c.chunk_id,
+                    "score": c.score,
+                    "snippet": c.snippet,
+                }
+                for c in answer.citations
+            ]
+
+            has_citation = bool(citations)
+            source_ok = _source_matches(citations, item.expected_source)
+            keywords_ok = _contains_all_keywords(answer.answer, [str(x) for x in keywords])
+
+            checks = [
+                ("citation", has_citation),
+                ("source", source_ok),
+                ("keywords", keywords_ok),
+            ]
+            score = round((sum(1 for _, ok in checks if ok) / len(checks)) * 100.0, 2)
+            item_passed = score >= 100.0
+
+            item.answer = answer.answer
+            item.citations_json = models.json_dumps(citations)
+            item.passed = item_passed
+            item.score = score
+            item.notes = "; ".join(f"{name}={'ok' if ok else 'missing'}" for name, ok in checks)
+
+            if item_passed:
+                passed += 1
+            total_score += score
+
+            run.passed_questions = passed
+            run.score = round(total_score / max(1, index), 2)
+            session.commit()
+            _update_job(job_id, progress=int(index / max(1, total) * 100))
+
+        run.status = "DONE"
+        run.total_questions = total
+        run.passed_questions = passed
+        run.score = round(total_score / max(1, total), 2)
+        run.finished_at = datetime.utcnow()
+        session.commit()
+        _set_job_result(
+            job_id,
+            models.json_dumps(
+                {
+                    "run_id": run.id,
+                    "total_questions": run.total_questions,
+                    "passed_questions": run.passed_questions,
+                    "score": run.score,
+                }
+            ),
+        )
+    except Exception as exc:
+        run = session.get(models.PolicyEvalRun, int(run_id))
+        if run is not None:
+            run.status = "ERROR"
+            run.error = f"{exc.__class__.__name__}: {exc}"
+            run.finished_at = datetime.utcnow()
+            session.commit()
+        raise
     finally:
         session.close()
     _update_job(job_id, progress=100)

@@ -58,3 +58,31 @@ export interface ChatMessage {
   content: string;
   citations?: Citation[];
 }
+
+export interface PolicyEvalRun {
+  id: number;
+  name: string;
+  status: string;
+  total_questions: number;
+  passed_questions: number;
+  score: number;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface PolicyEvalItem {
+  id: number;
+  question: string;
+  expected_source: string;
+  expected_keywords: string[];
+  answer: string;
+  citations: Citation[];
+  passed: boolean;
+  score: number;
+  notes: string;
+}
+
+export interface PolicyEvalRunDetail extends PolicyEvalRun {
+  items: PolicyEvalItem[];
+}

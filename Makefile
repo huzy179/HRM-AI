@@ -87,14 +87,9 @@ test-api: ## Run API contract and endpoint tests locally
 test-docker: ## Run tests inside the API container
 	$(COMPOSE) exec api python -m pytest
 
-.PHONY: ragas-venv
-ragas-venv: ## Create local eval virtualenv and install Ragas dependencies
-	python3 -m venv .venv-evals
-	. .venv-evals/bin/activate && pip install -r backend/requirements.txt -r evals/requirements.txt
-
-.PHONY: ragas
-ragas: ## Run Policy RAG Ragas eval using .venv-evals
-	. .venv-evals/bin/activate && python evals/ragas_policy_eval.py --input evals/policy_eval_questions.jsonl
+.PHONY: policy-evals
+policy-evals: ## Show Policy RAG eval UI URL
+	@printf "Policy RAG evals: http://localhost:3000/admin/evals\n"
 
 .PHONY: frontend-lint
 frontend-lint: ## Run frontend lint locally

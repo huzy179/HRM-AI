@@ -27,6 +27,7 @@ JOB_TYPE_TO_QUEUE: dict[str, str] = {
     "policy_ingest": QUEUE_INDEX,
     "policy_rebuild": QUEUE_INDEX,
     "policy_clear": QUEUE_INDEX,
+    "policy_eval": QUEUE_INDEX,
     "cleanup_storage": QUEUE_INDEX,
     "extract_profile": QUEUE_INDEX,
     # LLM calls

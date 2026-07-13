@@ -1,3 +1,5 @@
-{"question":"Quy định nghỉ phép năm như thế nào?","ground_truth":"Điền câu trả lời kỳ vọng dựa trên tài liệu policy của bạn.","expected_source":"policy-file.pdf"}
-{"question":"Nhân viên cần làm gì khi muốn nghỉ ốm?","ground_truth":"Điền câu trả lời kỳ vọng dựa trên tài liệu policy của bạn.","expected_source":"policy-file.pdf"}
-
+{"question":"Nhân viên chính thức có bao nhiêu ngày phép năm?","expected_source":"policy_benefits_leave_2026.pdf","expected_keywords":["12 ngày phép"]}
+{"question":"Phụ cấp ăn trưa và gửi xe là bao nhiêu?","expected_source":"policy_benefits_leave_2026.pdf","expected_keywords":["500.000","150.000"]}
+{"question":"Giờ làm việc chính thức bắt đầu và kết thúc lúc nào?","expected_source":"policy_working_rules_2026.pdf","expected_keywords":["08:30","17:30"]}
+{"question":"Nhân viên được làm việc từ xa tối đa mấy ngày mỗi tuần?","expected_source":"policy_remote_work_2026.pdf","expected_keywords":["2 ngày"]}
+{"question":"Ngân sách đào tạo cá nhân mỗi năm là bao nhiêu?","expected_source":"policy_expense_training_2026.pdf","expected_keywords":["6.000.000"]}

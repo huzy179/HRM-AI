@@ -231,19 +231,20 @@ Nên dùng khi:
 
 ## 8. Flow Evaluation
 
-Mục tiêu: đánh giá chất lượng RAG thay vì chỉ nhìn cảm tính.
+Mục tiêu: đánh giá chất lượng RAG thay vì chỉ nhìn cảm tính, chạy trực tiếp trong app thay vì tạo môi trường Ragas riêng.
 
 Luồng sử dụng:
 
 1. Chuẩn bị bộ câu hỏi đánh giá trong `evals/policy_eval_questions.jsonl`.
-2. Chạy Ragas eval.
-3. Xem kết quả về answer relevancy, context precision, context recall và faithfulness.
+2. Mở trang admin eval và bấm `Run Eval`.
+3. Backend tạo `policy_eval_runs`, enqueue job `policy_eval`.
+4. Worker gọi Policy RAG, kiểm tra citation, expected source và expected keywords.
+5. Xem điểm và chi tiết từng câu hỏi trên UI.
 
 Chạy:
 
 ```bash
-make ragas-venv
-make ragas
+make policy-evals
 ```
 
 ## 9. Các URL Chính

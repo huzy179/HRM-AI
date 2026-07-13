@@ -233,5 +233,37 @@ class ChatFeedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class PolicyEvalRun(Base):
+    __tablename__ = "policy_eval_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
+    name: Mapped[str] = mapped_column(String(200), default="Policy eval", nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    total_questions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    passed_questions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PolicyEvalItem(Base):
+    __tablename__ = "policy_eval_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("policy_eval_runs.id"), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(50), default="default", nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_source: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    expected_keywords_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    answer: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    citations_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    passed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 def json_dumps(obj) -> str:
     return json.dumps(obj, ensure_ascii=False)

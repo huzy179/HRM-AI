@@ -9,6 +9,7 @@ import {
   RefreshCw,
   RotateCw,
   Shield,
+  BarChart3,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -139,6 +140,10 @@ export default function KnowledgeBaseAdminPage() {
           <Link href="/policy-chat" className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
             <BookOpen className="w-4 h-4" />
             Mở chatbot
+          </Link>
+          <Link href="/admin/evals" className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+            <BarChart3 className="w-4 h-4" />
+            Eval
           </Link>
         </div>
       </header>

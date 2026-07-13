@@ -68,11 +68,10 @@ make legacy-worker
 - Loki nhận log container qua Promtail
 - OpenTelemetry traces được gửi sang Jaeger khi `OTEL_EXPORTER_OTLP_ENDPOINT` được set
 
-Ragas Policy RAG eval (tách khỏi runtime image để Docker build nhẹ hơn):
+Policy RAG eval chạy trong app, không cần tạo venv riêng:
 
 ```bash
-python3 -m venv .venv-evals
-. .venv-evals/bin/activate
-pip install -r backend/requirements.txt -r evals/requirements.txt
-python evals/ragas_policy_eval.py --input evals/policy_eval_questions.jsonl
+make policy-evals
 ```
+
+Mở `http://localhost:3000/admin/evals`, bấm `Run Eval`, kết quả được lưu trong database và xử lý bởi worker.
